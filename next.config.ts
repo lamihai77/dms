@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Standalone output for deployment (includes Node.js server)
+  output: 'standalone',
 };
 
 export default nextConfig;

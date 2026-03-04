@@ -1,65 +1,87 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import Link from 'next/link';
+
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div>
+      <div className="page-header">
+        <h2>Dashboard</h2>
+        <p>DMS Administration Panel — Sistem intern ANRE</p>
+      </div>
+
+      <div className="stats-grid">
+        <Link href="/users" style={{ textDecoration: 'none' }}>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>
+              👤
+            </div>
+            <div className="stat-info">
+              <h4>Utilizatori</h4>
+              <p>Căutare, editare, status</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/notifications" style={{ textDecoration: 'none' }}>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+              📧
+            </div>
+            <div className="stat-info">
+              <h4>Notificări</h4>
+              <p>Log email-uri trimise</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/roles" style={{ textDecoration: 'none' }}>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+              🔑
+            </div>
+            <div className="stat-info">
+              <h4>Roluri</h4>
+              <p>Management roluri utilizatori</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/companies" style={{ textDecoration: 'none' }}>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+              🏢
+            </div>
+            <div className="stat-info">
+              <h4>Companii</h4>
+              <p>Căutare TERT, licențe</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link href="/cleanup" style={{ textDecoration: 'none' }}>
+          <div className="stat-card">
+            <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+              🧹
+            </div>
+            <div className="stat-info">
+              <h4>Curățare</h4>
+              <p>Duplicate companii (CUI)</p>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: '16px' }}>🔒 Informații Securitate</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.8' }}>
+          Această aplicație este accesibilă exclusiv membrilor grupului <strong>INTERN\Domain Admins</strong>.
+          <br />
+          Autentificarea se face automat prin Windows Authentication (SSO).
+          <br />
+          Toate modificările sunt înregistrate cu utilizatorul și timestamp-ul.
+        </p>
+      </div>
     </div>
   );
 }
