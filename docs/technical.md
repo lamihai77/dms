@@ -38,4 +38,26 @@ Variabilele de mediu sunt gestionate prin fișierele `.env.local` (exclus din Gi
 
 ## 5. Deployment și Versionare
 * **Git Repository:** GitHub `lamihai77/dms`
-* Credențialele (`.env.local`) sunt excluse strict prin `.gitignore`. Orice deployment trebuie să seteze aceste variabile de mediu individual pe serverul gazdă (IIS cu iisnode, Docker, etc).
+* Credențialele (`.env.local`) sunt excluse strict prin `.gitignore`. Orice deployment trebuie să seteze aceste variabile de mediu individual pe serverul gazdă.
+
+### Flux de Deployment Automatizat (Git + PM2)
+Aplicația folosește un flux automatizat de deployment bazat pe GitHub și managerul de procese **PM2**.
+
+**Pe mediul Local (Dezvoltare):**
+1. Modificare cod și testare locală (`npm run dev`).
+2. Trimitere modificări pe GitHub (`git push origin main`).
+
+**Pe Server (Producție):**
+1. Navigare în folderul aplicației (`cd C:\Proiecte\dms`).
+2. Rulare script automat: `.\deploy.bat`.
+   * Scriptul execută automat următorii pași: `git pull`, `pm2 kill`, `npm run build`, și `pm2 start`.
+   * Eliberează complet resursele node_modules evitând erori de tip EPERM.
+3. Aplicația este menținută online 24/7 de `ecosystem.config.js`.
+
+**Dacă se adaugă pachete noi (`npm install`):**
+Trebuie executat manual pe server o singură dată:
+```powershell
+pm2 kill
+npm install
+.\deploy.bat
+```
