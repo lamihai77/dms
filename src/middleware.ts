@@ -14,10 +14,20 @@ export function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Verificăm dacă există cookie-ul creat la autentificare
+    // DEBUG TEMPORAR: Vedem ce trimite IIS-ul
+    console.log('[MIDDLEWARE DEBUG] Raw headers:', Object.fromEntries(request.headers));
+    const iisUser = request.headers.get('x-forwarded-user') || request.headers.get('x-iis-windowsauthtoken');
+    console.log('[MIDDLEWARE DEBUG] Extracted IIS User:', iisUser);
+
+    // Dacă avem utilizator de la IIS (SSO), permitem accesul direct
+    if (iisUser) {
+        return NextResponse.next();
+    }
+
+    // Verificăm dacă există cookie-ul creat la autentificare (pentru dev / standalone)
     const cookie = request.cookies.get('dms_admin_auth');
 
-    // Dacă nu există cookie-ul, redirecționăm forțat către /login
+    // Dacă nu există user IIS și nici cookie-ul, redirecționăm forțat către /login
     if (!cookie || cookie.value !== 'authenticated') {
         const loginUrl = new URL('/login', request.url);
         return NextResponse.redirect(loginUrl);
