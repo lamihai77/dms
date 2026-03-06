@@ -26,27 +26,28 @@ export function getAuthUser(req: NextRequest): string | null {
 /**
  * Middleware to check if user is authenticated and is a Domain Admin.
  * Returns NextResponse with 401/403 if not authorized.
+ * Supports: IIS Windows Auth headers, cookie-based login (standalone mode).
  */
 export function requireDomainAdmin(req: NextRequest): NextResponse | null {
+    // Check IIS Windows Auth headers (when running behind IIS)
     const user = getAuthUser(req);
+    if (user) return null; // IIS already verified the user
 
-    if (!user) {
-        return NextResponse.json(
-            { error: 'Autentificare necesară' },
-            { status: 401 }
-        );
+    // Check cookie-based auth (when running standalone via PM2)
+    const cookie = req.cookies.get('dms_admin_auth');
+    if (cookie && cookie.value === 'authenticated') {
+        return null; // Cookie is valid, allow access
     }
 
-    // In production, IIS handles group membership via Windows Auth
-    // The fact that the request reaches us means IIS already authenticated the user
-    // Additional group checking can be done via LDAP if needed
-
-    // In development, skip group check
+    // Development fallback (already handled in getAuthUser, but just in case)
     if (process.env.NODE_ENV === 'development') {
-        return null; // Allow access
+        return null;
     }
 
-    return null; // Allow access (IIS already verified Domain Admins)
+    return NextResponse.json(
+        { error: 'Autentificare necesară' },
+        { status: 401 }
+    );
 }
 
 /**

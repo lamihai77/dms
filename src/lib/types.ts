@@ -38,6 +38,12 @@ export interface Utilizator {
     LOCKED_AT: Date | null;
     DLP: number | null;
     import_info2: string | null;
+    TERT_NUME?: string | null;
+    TERT_CUI?: string | null;
+    TERT_CNP?: string | null;
+    TERT_JUDET?: string | null;
+    TERT_LOCALITATE?: string | null;
+    NR_SUBCONTURI?: number | null;
 }
 
 // ============================================

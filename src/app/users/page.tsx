@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface User {
     ID: number;
@@ -26,16 +26,20 @@ interface User {
     adrese_mail_alternative: string | null;
     TERT_NUME: string | null;
     TERT_CUI: string | null;
+    TERT_CNP: string | null;
+    TERT_JUDET?: string | null;
+    TERT_LOCALITATE?: string | null;
+    NR_SUBCONTURI?: number | null;
 }
 
 export default function UsersPage() {
-    const [searchType, setSearchType] = useState<'email' | 'cnp' | 'username' | 'nume'>('email');
     const [searchValue, setSearchValue] = useState('');
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [editUser, setEditUser] = useState<User | null>(null);
     const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
+    const [filterCategory, setFilterCategory] = useState<'all' | 'ad' | 'pf' | 'pj'>('all');
 
     const showToast = (type: string, message: string) => {
         setToast({ type, message });
@@ -43,11 +47,13 @@ export default function UsersPage() {
     };
 
     const handleSearch = async () => {
-        if (!searchValue.trim()) return;
+        const trimmedValue = searchValue.trim();
+        if (!trimmedValue) return;
         setLoading(true);
         setError('');
+        setFilterCategory('all'); // Reset filter to show all search results
         try {
-            const res = await fetch(`/api/users?${searchType}=${encodeURIComponent(searchValue)}`);
+            const res = await fetch(`/api/users?q=${encodeURIComponent(trimmedValue)}`);
             const data = await res.json();
             if (data.success) {
                 setUsers(data.data);
@@ -62,6 +68,21 @@ export default function UsersPage() {
         }
         setLoading(false);
     };
+
+    const filteredUsers = users.filter(user => {
+        if (filterCategory === 'all') return true;
+
+        // AD = Active Directory users (those with LDAP username)
+        if (filterCategory === 'ad') return !!user.USERNAME_LDAP;
+
+        // PF = Persoane Fizice (Linked to a tert where PERS_FIZ = 1 or it has a CNP)
+        if (filterCategory === 'pf') return !!user.TERT_CNP;
+
+        // PJ = Persoane Juridice (Linked to a tert where PERS_FIZ = 0 or it has a CUI)
+        if (filterCategory === 'pj') return !!user.TERT_CUI;
+
+        return true;
+    });
 
     const toggleStatus = async (user: User) => {
         const newStatus = user.ACTIV === 1 ? 0 : 1;
@@ -113,30 +134,18 @@ export default function UsersPage() {
     return (
         <div>
             <div className="page-header">
-                <h2>👤 Căutare Utilizatori</h2>
-                <p>Caută, vizualizează și editează utilizatori din DMS</p>
+                <h2>👤 Gestiune Utilizatori</h2>
+                <p>Categorisire AD, PF, PJ și detalii contractuale</p>
             </div>
 
             {/* Search Card */}
             <div className="card">
-                <div className="search-bar">
-                    <div className="search-input-group" style={{ maxWidth: 180 }}>
-                        <label>Caută după</label>
-                        <select
-                            value={searchType}
-                            onChange={(e) => setSearchType(e.target.value as typeof searchType)}
-                        >
-                            <option value="email">Email</option>
-                            <option value="cnp">CNP</option>
-                            <option value="username">Username</option>
-                            <option value="nume">Nume</option>
-                        </select>
-                    </div>
+                <div className="search-bar" style={{ gridTemplateColumns: '1fr auto' }}>
                     <div className="search-input-group">
-                        <label>Valoare</label>
+                        <label>Căutare universală</label>
                         <input
                             type="text"
-                            placeholder={`Introdu ${searchType}...`}
+                            placeholder="Introdu Nume, Email, CUI, CNP sau Username..."
                             value={searchValue}
                             onChange={(e) => setSearchValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -155,6 +164,34 @@ export default function UsersPage() {
                 </div>
             </div>
 
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                <button
+                    className={`btn ${filterCategory === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setFilterCategory('all')}
+                >
+                    Toți ({users.length})
+                </button>
+                <button
+                    className={`btn ${filterCategory === 'ad' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setFilterCategory('ad')}
+                >
+                    AD ({users.filter(u => !!u.USERNAME_LDAP).length})
+                </button>
+                <button
+                    className={`btn ${filterCategory === 'pf' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setFilterCategory('pf')}
+                >
+                    Persoane Fizice ({users.filter(u => !!u.TERT_CNP).length})
+                </button>
+                <button
+                    className={`btn ${filterCategory === 'pj' ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={() => setFilterCategory('pj')}
+                >
+                    Persoane Juridice ({users.filter(u => !!u.TERT_CUI).length})
+                </button>
+            </div>
+
             {/* Error */}
             {error && (
                 <div className="card" style={{ borderColor: 'var(--accent-danger)', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -163,79 +200,110 @@ export default function UsersPage() {
             )}
 
             {/* Results Table */}
-            {users.length > 0 && (
+            {filteredUsers.length > 0 && (
                 <div className="card">
                     <div className="card-header">
-                        <h3>Rezultate ({users.length})</h3>
+                        <h3>
+                            Rezultate {
+                                filterCategory === 'ad' ? 'AD' :
+                                    filterCategory === 'pf' ? 'Persoane Fizice' :
+                                        filterCategory === 'pj' ? 'Persoane Juridice' :
+                                            'Toți'
+                            } ({filteredUsers.length})
+                        </h3>
                     </div>
                     <div className="data-table-wrapper">
                         <table className="data-table">
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Nume</th>
-                                    <th>Username</th>
-                                    <th>Email</th>
                                     <th>Status</th>
-                                    <th>Locked</th>
-                                    <th>Companie</th>
-                                    <th>Modificat</th>
+                                    <th>Denumire</th>
+                                    {filterCategory === 'pj' ? (
+                                        <>
+                                            <th>Cod CUI</th>
+                                            <th>Email</th>
+                                            <th>Username</th>
+                                            <th>Județ</th>
+                                            <th>Localitate</th>
+                                            <th>Nr. subconturi</th>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <th>Cod CUI / CNP</th>
+                                            <th>Email</th>
+                                            <th>Username</th>
+                                            <th>Subconturi</th>
+                                            <th>Tip</th>
+                                            <th>TERT (Nume)</th>
+                                        </>
+                                    )}
                                     <th>Acțiuni</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map((user) => (
+                                {filteredUsers.map((user) => (
                                     <tr key={user.ID}>
-                                        <td style={{ color: 'var(--text-muted)' }}>{user.ID}</td>
                                         <td>
-                                            <strong>{user.NUME}</strong> {user.PRENUME}
+                                            {user.ACTIV ? (
+                                                <span className="badge badge-success" style={{ cursor: 'pointer' }} onClick={() => toggleStatus(user)}>
+                                                    Activ
+                                                </span>
+                                            ) : (
+                                                <span className="badge badge-danger" style={{ cursor: 'pointer' }} onClick={() => toggleStatus(user)}>
+                                                    Inactiv
+                                                </span>
+                                            )}
                                         </td>
-                                        <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{user.USERNAME}</td>
+                                        <td>
+                                            <strong>{user.NUME} {user.PRENUME}</strong>
+                                            {user.USERNAME_LDAP && <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)' }}>AD Account</div>}
+                                        </td>
+                                        <td>
+                                            {user.TERT_CUI || user.TERT_CNP || '—'}
+                                        </td>
                                         <td>{user.EMAIL}</td>
-                                        <td>
-                                            <label className="toggle" title={user.ACTIV ? 'Activ' : 'Inactiv'}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={user.ACTIV === 1}
-                                                    onChange={() => toggleStatus(user)}
-                                                />
-                                                <span className="toggle-slider"></span>
-                                            </label>
-                                        </td>
-                                        <td>
-                                            {user.LOCKED ? (
-                                                <span className="badge badge-danger">
-                                                    <span className="badge-dot"></span> Blocat
-                                                </span>
-                                            ) : (
-                                                <span className="badge badge-success">
-                                                    <span className="badge-dot"></span> OK
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            {user.TERT_NUME ? (
-                                                <span title={`CUI: ${user.TERT_CUI}`} style={{ fontSize: '0.82rem' }}>
-                                                    {user.TERT_NUME}
-                                                </span>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-muted)' }}>—</span>
-                                            )}
-                                        </td>
-                                        <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                            {formatDate(user.MODIFICAT_LA)}
-                                            {user.MODIFICAT_DE && (
-                                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                                    de {user.MODIFICAT_DE}
-                                                </div>
-                                            )}
-                                        </td>
+                                        <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{user.USERNAME}</td>
+
+                                        {filterCategory === 'pj' ? (
+                                            <>
+                                                <td>{user.TERT_JUDET || '—'}</td>
+                                                <td>{user.TERT_LOCALITATE || '—'}</td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    <span className="badge" style={{ background: '#f1f5f9', color: '#475569', minWidth: '30px', textAlign: 'center' }}>
+                                                        {user.NR_SUBCONTURI}
+                                                    </span>
+                                                </td>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <td>
+                                                    <span className="badge" style={{ background: '#f1f5f9', color: '#475569', minWidth: '30px', textAlign: 'center' }}>
+                                                        {user.NR_SUBCONTURI}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {user.ID_TERT ? (
+                                                        user.TERT_CNP ? (
+                                                            <span className="badge" style={{ background: '#e0f2fe', color: '#0369a1' }}>PF</span>
+                                                        ) : (
+                                                            <span className="badge" style={{ background: '#fce7f3', color: '#be185d' }}>PJ</span>
+                                                        )
+                                                    ) : (
+                                                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    {user.TERT_NUME || '—'}
+                                                </td>
+                                            </>
+                                        )}
+
                                         <td>
                                             <button
                                                 className="btn btn-ghost btn-sm"
                                                 onClick={() => setEditUser(user)}
                                             >
-                                                ✏️ Editează
+                                                ✏️ Detalii
                                             </button>
                                         </td>
                                     </tr>
@@ -267,15 +335,20 @@ export default function UsersPage() {
     );
 }
 
-function EditUserModal({
-    user,
-    onClose,
-    onSave,
-}: {
-    user: User;
-    onClose: () => void;
-    onSave: (data: Record<string, string>) => void;
-}) {
+interface Subaccount {
+    ID: number;
+    ID_USER: number;
+    ID_TERT: number;
+    TERT_NUME: string | null;
+    TERT_CUI: string | null;
+    TERT_CNP: string | null;
+    TERT_ACTIV: number | null;
+    TERT_BLOCAT: number | null;
+    TERT_JUDET: string | null;
+    TERT_LOCALITATE: string | null;
+}
+
+function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => void, onSave: (data: Record<string, string>) => void }) {
     const [formData, setFormData] = useState({
         NUME: user.NUME || '',
         PRENUME: user.PRENUME || '',
@@ -283,79 +356,145 @@ function EditUserModal({
         ticket_emails: user.ticket_emails || '',
         adrese_mail_alternative: user.adrese_mail_alternative || '',
     });
+    const [subaccounts, setSubaccounts] = useState<Subaccount[]>([]);
+    const [loadingSubs, setLoadingSubs] = useState(false);
+    const [subError, setSubError] = useState<string | null>(null);
 
-    const updateField = (field: string, value: string) => {
-        setFormData({ ...formData, [field]: value });
+    useEffect(() => {
+        const fetchSubaccounts = async () => {
+            setLoadingSubs(true);
+            setSubError(null);
+            try {
+                const res = await fetch(`/api/users/${user.ID}/subaccounts?t=${Date.now()}`);
+                const data = await res.json();
+                if (data.success) {
+                    setSubaccounts(data.data);
+                } else {
+                    setSubError(data.error || 'Eroare necunoscută la API');
+                }
+            } catch (error) {
+                setSubError('Nu s-a putut contacta serverul');
+            }
+            setLoadingSubs(false);
+        };
+        fetchSubaccounts();
+    }, [user.ID]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+            <div className="modal-content" style={{ maxWidth: '700px' }}>
                 <div className="modal-header">
-                    <h3>✏️ Editare: {user.NUME} {user.PRENUME}</h3>
-                    <button className="modal-close" onClick={onClose}>✕</button>
+                    <h3>Detalii Utilizator: {user.NUME} {user.PRENUME}</h3>
+                    <button className="btn-close" onClick={onClose}>&times;</button>
                 </div>
 
                 <div className="modal-body">
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                        ID: {user.ID} | Username: {user.USERNAME} |
-                        {user.ID_TERT ? ` TERT: ${user.TERT_NUME} (${user.TERT_CUI})` : ' Fără TERT'}
+                    <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '15px', padding: '10px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div><strong>ID:</strong> {user.ID}</div>
+                            <div><strong>Username:</strong> {user.USERNAME}</div>
+                            <div><strong>TERT Principal:</strong> {user.TERT_NUME || 'Fără TERT'}</div>
+                            <div><strong>Identitate:</strong> {user.TERT_CUI ? 'CUI: ' + user.TERT_CUI : user.TERT_CNP ? 'CNP: ' + user.TERT_CNP : '—'}</div>
+                            {user.TERT_JUDET && <div style={{ gridColumn: 'span 2' }}><strong>Locație:</strong> {user.TERT_JUDET}, {user.TERT_LOCALITATE || ''}</div>}
+                        </div>
                     </div>
 
                     <div className="form-row">
                         <div className="form-group">
                             <label>Nume</label>
-                            <input
-                                type="text"
-                                value={formData.NUME}
-                                onChange={(e) => updateField('NUME', e.target.value)}
-                            />
+                            <input name="NUME" value={formData.NUME} onChange={handleChange} />
                         </div>
                         <div className="form-group">
                             <label>Prenume</label>
-                            <input
-                                type="text"
-                                value={formData.PRENUME}
-                                onChange={(e) => updateField('PRENUME', e.target.value)}
-                            />
+                            <input name="PRENUME" value={formData.PRENUME} onChange={handleChange} />
                         </div>
                     </div>
 
                     <div className="form-group">
-                        <label>Email</label>
-                        <input
-                            type="email"
-                            value={formData.EMAIL}
-                            onChange={(e) => updateField('EMAIL', e.target.value)}
-                        />
+                        <label>Email Principal</label>
+                        <input name="EMAIL" value={formData.EMAIL} onChange={handleChange} />
                     </div>
 
                     <div className="form-group">
-                        <label>Ticket Emails</label>
-                        <input
-                            type="text"
-                            value={formData.ticket_emails}
-                            onChange={(e) => updateField('ticket_emails', e.target.value)}
-                        />
+                        <label>Emailuri Tichete (separate prin ;)</label>
+                        <input name="ticket_emails" value={formData.ticket_emails} onChange={handleChange} />
                     </div>
 
                     <div className="form-group">
-                        <label>Adrese Mail Alternative</label>
-                        <input
-                            type="text"
+                        <label>Emailuri Alternative</label>
+                        <textarea
+                            name="adrese_mail_alternative"
                             value={formData.adrese_mail_alternative}
-                            onChange={(e) => updateField('adrese_mail_alternative', e.target.value)}
+                            onChange={handleChange}
+                            rows={3}
                         />
                     </div>
 
-                    <div className="card" style={{ background: 'var(--bg-secondary)', marginBottom: 0 }}>
-                        <h4 style={{ fontSize: '0.85rem', marginBottom: '8px' }}>ℹ️ Info Cont</h4>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.8' }}>
-                            <div>Status: {user.ACTIV ? '✅ Activ' : '❌ Inactiv'}</div>
-                            <div>Locked: {user.LOCKED ? '🔒 Da' : '🔓 Nu'}</div>
-                            <div>LDAP: {user.USERNAME_LDAP || '—'}</div>
-                            <div>Parolă setată: {user.PASS_SET_DATE ? new Date(user.PASS_SET_DATE).toLocaleDateString('ro-RO') : '—'}</div>
-                            <div>Creat de: {user.CREAT_DE || '—'} la {user.CREAT_LA ? new Date(user.CREAT_LA).toLocaleDateString('ro-RO') : '—'}</div>
+                    {/* Subaccounts Section */}
+                    <div style={{ marginTop: '20px' }}>
+                        <h4 style={{ marginBottom: '10px', fontSize: '0.95rem', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
+                            🏢 Subconturi / Asocieri ({subaccounts.length})
+                        </h4>
+                        {loadingSubs ? (
+                            <div style={{ textAlign: 'center', padding: '10px' }}>Se încarcă...</div>
+                        ) : subError ? (
+                            <div style={{ padding: '10px', color: 'red', background: '#fee2e2', borderRadius: '4px', fontSize: '0.85rem' }}>
+                                ⚠️ {subError}
+                            </div>
+                        ) : subaccounts.length > 0 ? (
+                            // ... existing table rendering ...
+                            <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '4px' }}>
+                                <table className="data-table" style={{ fontSize: '0.8rem' }}>
+                                    <thead style={{ position: 'sticky', top: 0, background: 'white' }}>
+                                        <tr>
+                                            <th>Denumire Tert</th>
+                                            <th>CUI / CNP</th>
+                                            <th>Status</th>
+                                            <th>Locație</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {subaccounts.map(sub => (
+                                            <tr key={sub.ID}>
+                                                <td>
+                                                    {sub.TERT_NUME || <span style={{ color: 'red' }}>⚠️ Tert inexistent (ID: {sub.ID_TERT})</span>}
+                                                </td>
+                                                <td>{sub.TERT_CUI || sub.TERT_CNP || '—'}</td>
+                                                <td>
+                                                    {sub.TERT_ACTIV === 0 ? (
+                                                        <span className="badge badge-danger">Inactiv</span>
+                                                    ) : sub.TERT_BLOCAT === 1 ? (
+                                                        <span className="badge badge-danger">Blocat</span>
+                                                    ) : sub.TERT_ACTIV === 1 ? (
+                                                        <span className="badge badge-success">Activ</span>
+                                                    ) : (
+                                                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                                    )}
+                                                </td>
+                                                <td>{sub.TERT_JUDET ? `${sub.TERT_JUDET}, ${sub.TERT_LOCALITATE || ''}` : '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                Nu există subconturi asociate.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="card" style={{ background: 'var(--bg-secondary)', marginTop: '20px', marginBottom: 0 }}>
+                        <h4 style={{ fontSize: '0.85rem', marginBottom: '8px' }}>ℹ️ Info Sistem</h4>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: '1.6', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                            <div><strong>Status:</strong> {user.ACTIV ? 'Activ' : 'Inactiv'}</div>
+                            <div><strong>Locked:</strong> {user.LOCKED ? 'Da' : 'Nu'}</div>
+                            <div><strong>LDAP:</strong> {user.USERNAME_LDAP || '—'}</div>
+                            <div><strong>Creat la:</strong> {user.CREAT_LA ? new Date(user.CREAT_LA).toLocaleDateString() : '—'}</div>
                         </div>
                     </div>
                 </div>

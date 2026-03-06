@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, sql } from '@/lib/db';
-import { requireDomainAdmin, getAuthUser, getUsername } from '@/lib/auth';
-import { ApiResponse, Utilizator, UserSearchParams } from '@/lib/types';
+import { requireDomainAdmin } from '@/lib/auth';
+import { ApiResponse, Utilizator } from '@/lib/types';
 
 /**
  * GET /api/users?email=...&cnp=...&username=...&nume=...
@@ -16,11 +16,14 @@ export async function GET(req: NextRequest) {
     const cnp = searchParams.get('cnp');
     const username = searchParams.get('username');
     const nume = searchParams.get('nume');
+    const q = searchParams.get('q');
 
-    if (!email && !cnp && !username && !nume) {
+    const searchVal = (q || email || cnp || username || nume || '').trim();
+
+    if (!searchVal) {
         return NextResponse.json<ApiResponse<null>>({
             success: false,
-            error: 'Specifică cel puțin un criteriu de căutare (email, cnp, username, sau nume)',
+            error: 'Specifică un criteriu de căutare',
         }, { status: 400 });
     }
 
@@ -28,29 +31,23 @@ export async function GET(req: NextRequest) {
         const pool = await getDb();
         const request = pool.request();
 
-        const conditions: string[] = [];
+        // Universal search across multiple fields for better UX
+        const condition = `(
+            U.NUME LIKE @val OR 
+            U.PRENUME LIKE @val OR 
+            U.EMAIL LIKE @val OR 
+            U.USERNAME LIKE @val OR 
+            U.USERNAME_LDAP LIKE @val OR 
+            U.adrese_mail_alternative LIKE @val OR
+            T.NUME LIKE @val OR 
+            T.COD_CUI LIKE @val OR 
+            T.CNP LIKE @val
+        )`;
 
-        if (email) {
-            conditions.push('U.EMAIL LIKE @email');
-            request.input('email', sql.VarChar, `%${email}%`);
-        }
-        if (cnp) {
-            conditions.push('T.CNP LIKE @cnp');
-            request.input('cnp', sql.VarChar, `%${cnp}%`);
-        }
-        if (username) {
-            conditions.push('(U.USERNAME LIKE @username OR U.USERNAME_LDAP LIKE @username)');
-            request.input('username', sql.VarChar, `%${username}%`);
-        }
-        if (nume) {
-            conditions.push('(U.NUME LIKE @nume OR U.PRENUME LIKE @nume)');
-            request.input('nume', sql.NVarChar, `%${nume}%`);
-        }
-
-        const whereClause = conditions.join(' AND ');
+        request.input('val', sql.NVarChar, `%${searchVal}%`);
 
         const result = await request.query(`
-      SELECT TOP 50
+      SELECT TOP 200
         U.ID,
         U.NUME,
         U.PRENUME,
@@ -73,10 +70,17 @@ export async function GET(req: NextRequest) {
         U.ticket_emails,
         U.adrese_mail_alternative,
         T.NUME AS TERT_NUME,
-        T.COD_CUI AS TERT_CUI
-      FROM UTILIZATORI U
-      LEFT JOIN TERT T ON U.ID_TERT = T.ID
-      WHERE ${whereClause}
+        T.COD_CUI AS TERT_CUI,
+        T.CNP AS TERT_CNP,
+        T.PERS_FIZ AS TERT_PERS_FIZ,
+        J.DENUMIRE AS TERT_JUDET,
+        L.DENUMIRE AS TERT_LOCALITATE,
+        (SELECT COUNT(*) FROM DMS.SUBCONTURI S WHERE S.ID_USER = U.ID) AS NR_SUBCONTURI
+      FROM DMS.UTILIZATORI U
+      LEFT JOIN DMS.TERT T ON U.ID_TERT = T.ID
+      LEFT JOIN DMS.JUDET J ON T.ID_JUDET = J.ID
+      LEFT JOIN DMS.LOCALITATE L ON T.ID_LOCALITATE = L.ID
+      WHERE ${condition}
       ORDER BY U.NUME, U.PRENUME
     `);
 

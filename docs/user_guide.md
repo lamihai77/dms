@@ -12,11 +12,17 @@ Meniul din stânga îți oferă acces rapid la cele 5 mari secțiuni ale platfor
 
 ### 1. 👤 Utilizatori
 Secțiunea dedicată vizualizării conturilor individuale de persoană care accesează sistemul.
-* **Căutare Avansată:** Poți căuta o persoană după *Email, Nume, CNP* sau *Username*. Funcția de căutare este flexibilă: dacă dorești toți utilizatorii cu adrese de pe un anumit domeniu, scrie pur și simplu `@domeniu.ro` în câmpul de Email și apasă *Caută*.
+* **Căutare Universală:** Nu mai este nevoie să selectezi ce anume cauți. Poți introduce direct în caseta de căutare orice fragment de: *Nume, Email, CUI, CNP* sau *Username*. Sistemul va căuta simultan în toate câmpurile și îți va returna cele mai bune potriviri. 
+* **Categorisire (Tab-uri):** Poți filtra rapid rezultatele folosind tab-urile:
+  - **Toți**: Toate rezultatele căutării.
+  - **AD**: Doar utilizatorii care provin din Active Directory.
+  - **Persoane Fizice**: Doar conturile asociate cu un CNP.
+  - **Persoane Juridice**: Conturile asociate cu o companie (CUI). Această vizualizare îți arată coloane suplimentare specifice: *Județ, Localitate* și *Numărul de subconturi*.
 * **Semnificația Statusurilor pe ecran:**
-  * **Tip (PF/PJ):** Îți arată vizual dacă acel utilizator este o simplă persoană fizică sau reprezintă o Companie / Instituție Juridică.
-  * **Status (Butonul On/Off):** Indică dacă contul persoanei este activ, adică are drept să se logheze pe site-ul principal. Dacă este "Oprit" (stânga), chiar dacă știe parola, persoana nu poate intra.
-  * **Locked (OK / Blocat):** Reprezintă blocarea automată din motive de securitate (ex: a greșit parola de prea multe ori consecutiv). Un utilizator "Blocat" are nevoie de intervenția unui operator din această platformă pentru a-i debloca lacătul.
+  - **Status (Badge-uri colorate):** 
+    - <span style="color: green; font-weight: bold;">Activ</span>: Contul are permisiunea de a se loga.
+    - <span style="color: red; font-weight: bold;">Inactiv</span>: Contul este suspendat administrativ.
+  - **Identitate:** Câmpul "Denumire" combină acum Numele și Prenumele pentru o citire mai ușoară.
 
 ### 2. 🏢 Companii (TERT)
 Locul unde vizualizezi datele entităților legale (Persoane Juridice și asocierile oficiale). Spre deosebire de meniul *Utilizatori* (care se referă la conturi logabile), aici vei vedea datele firmei, CUI-ul, și setările lor specifice la nivel de companie mamă.

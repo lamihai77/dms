@@ -27,12 +27,14 @@ Variabilele de mediu sunt gestionate prin fișierele `.env.local` (exclus din Gi
   * `/notifications` - Vizualizarea log-urilor de email din `AUTO_EMAILS`.
   * `/cleanup` - Utilitar pentru curățarea duplicatelor.
 * `/src/app/api/` - Conține backend-ul (API-urile RESTful), răspunzând la cererile HTTP trimise de pagini.
-* `/src/lib/` - Fișiere comune: conexiune DB (`db.ts`), metode de utilitate și tipuri TypeScript (`types.ts`).
+* `/src/lib/` - Fișiere comune: conexiune DB (`db.ts`), metode de utilitate și tipuri TypeScript.
 
 ## 4. Logica de Căutare (Backend)
-Funcția de căutare din API (ex: `api/users/route.ts`) implementează căutare multi-câmp folosind clauze `LIKE` cu wildcard implicit (`%valoare%`):
-* Căutarea după **Email** și **Username** se face pe modul wildcard total, returnând potriviri parțiale.
-* Sistemul asociază entitățile `UTILIZATORI` (reprezentând contul de login) cu entitățile `TERT` (reprezentând datele legale de client). Conexiunea se face prin `ID_TERT`. Din interfață și din API, diferențierea între Persoane Fizice și Persoane Juridice se face determinând existența câmpurilor `TERT_CNP` vs `TERT_CUI`.
+### Căutare Utilizatori
+- **Logica**: Universal Search. O singură casetă de text care interoghează simultan: `NUME`, `PRENUME`, `EMAIL`, `USERNAME`, `USERNAME_LDAP`, `CNP`, `CUI` și `TERT_NUME`.
+- **Backend**: Endpoint `/api/users?q=...`. Folosește `LIKE %val%` pe toate coloanele relevante.
+- **Limită**: 200 de rezultate.
+- Sistemul asociază entitățile `UTILIZATORI` (reprezentând contul de login) cu entitățile `TERT` (reprezentând datele legale de client). Conexiunea se face prin `ID_TERT`. Din interfață și din API, diferențierea între Persoane Fizice și Persoane Juridice se face determinând existența câmpurilor `TERT_CNP` vs `TERT_CUI`.
 
 ## 5. Deployment și Versionare
 * **Git Repository:** GitHub `lamihai77/dms`

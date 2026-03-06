@@ -1,25 +1,17 @@
-# Depende on the environment
-.env*.local
-
-# Dependencies
+# Excludem fisierele de build si asa-numitele dosar "node_modules" de npm
+.next/
 node_modules/
 
-# Build
-.next/
-out/
+# Variabile de mediu (date sensibile - credentiale)
+.env
+.env.local
+.env.production
 
-# Debug
-npm-debug.log*
-
-# OS
-Thumbs.db
-Desktop.ini
+# Fisiere de sistem
 .DS_Store
+Thumbs.db
 
-# IDE
-.vscode/
-.idea/
-
-# Misc
-*.tsbuildinfo
-next-env.d.ts
+# Fisiere de debug temporare
+debug_*.ps1
+check_*.ps1
+lint_output.txt

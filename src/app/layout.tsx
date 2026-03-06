@@ -41,7 +41,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<UserInfo | null>(null);
-  let currentSection = '';
 
   useEffect(() => {
     fetch('/api/me')
@@ -58,9 +57,8 @@ function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.map((item) => {
-          const showSection = item.section !== currentSection;
-          if (showSection) currentSection = item.section;
+        {navItems.map((item, index) => {
+          const showSection = index === 0 || item.section !== navItems[index - 1].section;
 
           return (
             <div key={item.href}>
