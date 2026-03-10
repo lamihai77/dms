@@ -100,12 +100,12 @@ export default function ConfirmWriteModal({
 
                     {step === 1 ? (
                         <div style={{ padding: '12px', background: '#fffbeb', color: '#b45309', borderLeft: '4px solid #f59e0b', borderRadius: '4px', fontSize: '0.85rem' }}>
-                            Vă rugăm să revisați cu atenție diferențele de mai sus. Odată confirmată, scrierea va altera definitiv înregistrările din producție, cu excepția cazului în care payload-ul este complet idempotent.
+                            Te rugăm să verifici cu atenție diferențele evidențiate mai sus. Dacă totul este corect, poți continua validarea pentru a salva noile date.
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                             <div style={{ padding: '12px', background: '#fef2f2', color: '#b91c1c', borderLeft: '4px solid #ef4444', borderRadius: '4px', fontSize: '0.85rem' }}>
-                                Sunteți pe cale să inițiați o tranzacție DML (UPDATE) către serverul SQL de producție. Verificați cu maximă certitudine intenția curentă.
+                                Ești pe cale să modifici ireversibil datele din mediul de Producție (PROD). Te rugăm să fii absolut sigur înainte de a confirma operațiunea.
                             </div>
 
                             {requireTypedConfirm && (
