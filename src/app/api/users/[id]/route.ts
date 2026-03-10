@@ -87,45 +87,78 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         'PAROLA', 'ticket_emails', 'adrese_mail_alternative',
     ];
 
-    const updates: string[] = [];
-    const pool = await getDb();
-    const request = pool.request();
-    request.input('id', sql.Numeric, userId);
-    request.input('modificat_de', sql.VarChar, getUsername(authUser));
-    request.input('modificat_la', sql.DateTime2, new Date());
-
-    for (const field of allowedFields) {
-        if (body[field] !== undefined) {
-            updates.push(`${field} = @${field}`);
-            const value = body[field];
-            if (typeof value === 'number') {
-                request.input(field, sql.Numeric, value);
-            } else {
-                request.input(field, sql.NVarChar, value);
-            }
-        }
+    // Strict bounds validation
+    if (body.ACTIV !== undefined && body.ACTIV !== 0 && body.ACTIV !== 1) {
+        return NextResponse.json({ success: false, error: 'ACTIV trebuie să fie 0 sau 1' }, { status: 400 });
     }
-
-    if (updates.length === 0) {
-        return NextResponse.json<ApiResponse<null>>({
-            success: false,
-            error: 'Niciun câmp de actualizat',
-        }, { status: 400 });
+    if (body.LOCKED !== undefined && body.LOCKED !== 0 && body.LOCKED !== 1) {
+        return NextResponse.json({ success: false, error: 'LOCKED trebuie să fie 0 sau 1' }, { status: 400 });
     }
-
-    updates.push('MODIFICAT_DE = @modificat_de');
-    updates.push('MODIFICAT_LA = @modificat_la');
 
     try {
+        const pool = await getDb();
+
+        // 1. Verificare Idempotență. Extragem datele existente
+        const currentDataResult = await pool.request()
+            .input('id', sql.Numeric, userId)
+            .query(`SELECT * FROM UTILIZATORI WHERE ID = @id`);
+
+        if (currentDataResult.recordset.length === 0) {
+            return NextResponse.json<ApiResponse<null>>({
+                success: false,
+                error: 'Utilizatorul nu a fost găsit',
+            }, { status: 404 });
+        }
+
+        const currentUser = currentDataResult.recordset[0];
+        const updates: string[] = [];
+        const request = pool.request();
+        let hasRealChanges = false;
+
+        request.input('id', sql.Numeric, userId);
+        request.input('modificat_de', sql.VarChar, getUsername(authUser));
+        request.input('modificat_la', sql.DateTime2, new Date());
+
+        for (const field of allowedFields) {
+            if (body[field] !== undefined) {
+                // Comparam valoarea primita cu cea existenta deja in DB pentru a evita update-uri false
+                const currentValue = currentUser[field];
+                const newValue = body[field];
+
+                if (currentValue !== newValue) {
+                    hasRealChanges = true;
+                    updates.push(`${field} = @${field}`);
+                    if (typeof newValue === 'number') {
+                        request.input(field, sql.Numeric, newValue);
+                    } else {
+                        request.input(field, sql.NVarChar, newValue);
+                    }
+                }
+            }
+        }
+
+        if (updates.length === 0 || !hasRealChanges) {
+            // Idempotent: Nu e nevoie de niciun UPDATE în DB
+            console.log(`[IDEMPOTENT] No changes detected for User ${userId}. Skipping write.`);
+            return NextResponse.json<ApiResponse<{ updated: true, idempotent: boolean }>>({
+                success: true,
+                data: { updated: true, idempotent: true },
+            });
+        }
+
+        // 2. Executare Scriere Efectivă
+        updates.push('MODIFICAT_DE = @modificat_de');
+        updates.push('MODIFICAT_LA = @modificat_la');
+
         await request.query(`
       UPDATE UTILIZATORI 
       SET ${updates.join(', ')}
       WHERE ID = @id
     `);
 
-        return NextResponse.json<ApiResponse<{ updated: true }>>({
+        return NextResponse.json<ApiResponse<{ updated: true, idempotent: boolean }>>({
             success: true,
-            data: { updated: true },
+            data: { updated: true, idempotent: false },
         });
     } catch (error) {
         console.error('Error updating user:', error);

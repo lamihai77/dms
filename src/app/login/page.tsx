@@ -1,39 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function LoginPage() {
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const router = useRouter();
+    const [errorMessage, setErrorMessage] = useState('');
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+    useEffect(() => {
+        // Citim eroarea direct din browser, evităm useSearchParams() care dă crash la SSR
+        const params = new URLSearchParams(window.location.search);
+        const err = params.get('error');
+        if (err === 'Invalid') setErrorMessage('Parolă incorectă');
+        if (err === 'ServerFail') setErrorMessage('Eroare tehnică la Autentificare');
+    }, []);
 
-        try {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password }),
-            });
-
-            if (res.ok) {
-                router.push('/');
-                router.refresh(); // Force reload to apply auth state
-            } else {
-                const data = await res.json();
-                setError(data.error || 'Parolă incorectă');
-            }
-        } catch {
-            setError('Eroare de conexiune');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Eliminat funcția asincronă handleLogin. Totul se gestionează acum server-side primit din formData.
 
     return (
         <div style={{
@@ -59,30 +39,9 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                <form onSubmit={handleLogin}>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#334155', fontWeight: 500, fontSize: '0.9rem' }}>
-                            Parolă de acces
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Introduceți parola"
-                            required
-                            disabled={loading}
-                            style={{
-                                width: '100%',
-                                padding: '0.75rem',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: '6px',
-                                fontSize: '1rem',
-                                boxSizing: 'border-box'
-                            }}
-                        />
-                    </div>
-
-                    {error && (
+                {/* Formular Standard HTML (Fără React handle sub-submit) */}
+                <form action="/api/auth/login" method="POST">
+                    {errorMessage && (
                         <div style={{
                             color: '#ef4444',
                             backgroundColor: '#fef2f2',
@@ -92,28 +51,26 @@ export default function LoginPage() {
                             fontSize: '0.85rem',
                             border: '1px solid #fee2e2'
                         }}>
-                            {error}
+                            {errorMessage}
                         </div>
                     )}
 
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', color: '#334155', fontWeight: 500, fontSize: '0.9rem' }}>
+                            Parolă de acces
+                        </label>
+                        <input
+                            type="password"
+                            name="password"
+                            placeholder="Introduceți parola"
+                            required
+                        />
+                    </div>
+
                     <button
                         type="submit"
-                        disabled={loading}
-                        style={{
-                            width: '100%',
-                            padding: '0.85rem',
-                            backgroundColor: '#0ea5e9',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '1rem',
-                            fontWeight: 600,
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            opacity: loading ? 0.7 : 1,
-                            transition: 'background-color 0.2s'
-                        }}
                     >
-                        {loading ? 'Se validează...' : 'Autentificare'}
+                        Autentificare
                     </button>
                 </form>
             </div>

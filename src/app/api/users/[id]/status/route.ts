@@ -17,17 +17,49 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const userId = parseInt(id);
     const body = await req.json();
-    const { activ } = body as { activ: number };
+    const { activ } = body;
 
-    if (isNaN(userId) || (activ !== 0 && activ !== 1)) {
+    // Strict value bounds checking
+    if (activ !== 0 && activ !== 1) {
         return NextResponse.json<ApiResponse<null>>({
             success: false,
-            error: 'ID invalid sau valoare status invalidă (trebuie 0 sau 1)',
+            error: 'Campul "activ" trebuie să fie 0 sau 1.',
+        }, { status: 400 });
+    }
+
+    if (isNaN(userId)) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'ID invalid',
         }, { status: 400 });
     }
 
     try {
         const pool = await getDb();
+
+        // 1. Verificare Idempotență (Pre-Validare)
+        const checkResult = await pool.request()
+            .input('id', sql.Numeric, userId)
+            .query(`SELECT ACTIV FROM UTILIZATORI WHERE ID = @id`);
+
+        if (checkResult.recordset.length === 0) {
+            return NextResponse.json<ApiResponse<null>>({
+                success: false,
+                error: 'Utilizatorul nu există',
+            }, { status: 404 });
+        }
+
+        const currentStatus = checkResult.recordset[0].ACTIV;
+        if (currentStatus === activ) {
+            // Idempotent: Nu e nevoie de niciun UPDATE în DB
+            console.log(`[IDEMPOTENT] User ${userId} is already in status ${activ}. Skipping write.`);
+            return NextResponse.json<ApiResponse<{ activ: number, idempotent: boolean }>>({
+                success: true,
+                data: { activ, idempotent: true },
+            });
+        }
+
+        // 2. Executare Scriere (Post-Validare)
         await pool.request()
             .input('id', sql.Numeric, userId)
             .input('activ', sql.Numeric, activ)
@@ -38,9 +70,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         WHERE ID = @id
       `);
 
-        return NextResponse.json<ApiResponse<{ activ: number }>>({
+        return NextResponse.json<ApiResponse<{ activ: number, idempotent: boolean }>>({
             success: true,
-            data: { activ },
+            data: { activ, idempotent: false },
         });
     } catch (error) {
         console.error('Error updating user status:', error);

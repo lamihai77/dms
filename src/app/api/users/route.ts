@@ -88,6 +88,7 @@ export async function GET(req: NextRequest) {
             success: true,
             data: result.recordset,
             total: result.recordset.length,
+            _meta: { source: "DMS.UTILIZATORI + DMS.TERT" }
         });
     } catch (error) {
         console.error('Error searching users:', error);

@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
             success: true,
             data: result.recordset,
             total: result.recordset.length,
+            _meta: { source: "DMS.TERT" }
         });
     } catch (error) {
         console.error('Error searching companies:', error);

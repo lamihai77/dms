@@ -1,29 +1,21 @@
 @echo off
 title DMS - Deployment Tool
 echo =========================================================
-echo   Automatizare Deployment DMS (Git - Build - PM2)
+echo   Deployment DMS (Git - Build - Start)
 echo =========================================================
 echo.
 
-echo [1/4] Preluare cod nou din Git...
+cd /d d:\Proiecte\dms
+
+echo [1/3] Preluare cod nou din Git...
 git pull origin main
 
 echo.
-echo [2/4] Oprire completa PM2...
-C:\Users\%USERNAME%\AppData\Roaming\npm\pm2.cmd kill
-
-echo.
-echo [3/4] Compilare aplicatie (Next.js Build)...
+echo [2/3] Compilare aplicatie...
 call npm run build
 
 echo.
-echo [4/4] Pornire aplicatie in PM2...
-C:\Users\%USERNAME%\AppData\Roaming\npm\pm2.cmd start ecosystem.config.js
-C:\Users\%USERNAME%\AppData\Roaming\npm\pm2.cmd save
+echo [3/3] Pornire aplicatie...
+node .next\standalone\server.js
 
-echo.
-echo =========================================================
-echo   Deployment Finalizat! Status:
-echo =========================================================
-C:\Users\%USERNAME%\AppData\Roaming\npm\pm2.cmd list
 pause

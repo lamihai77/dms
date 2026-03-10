@@ -14,22 +14,15 @@ export function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // DEBUG TEMPORAR: Vedem ce trimite IIS-ul
-    console.log('[MIDDLEWARE DEBUG] Raw headers:', Object.fromEntries(request.headers));
-    const iisUser = request.headers.get('x-forwarded-user') || request.headers.get('x-iis-windowsauthtoken');
-    console.log('[MIDDLEWARE DEBUG] Extracted IIS User:', iisUser);
-
-    // Dacă avem utilizator de la IIS (SSO), permitem accesul direct
-    if (iisUser) {
-        return NextResponse.next();
-    }
-
-    // Verificăm dacă există cookie-ul creat la autentificare (pentru dev / standalone)
+    // Verificăm dacă există cookie-ul creat la autentificare (für dev / standalone)
     const cookie = request.cookies.get('dms_admin_auth');
+    console.log(`[MIDDLEWARE] Checking path: ${pathname} | Cookie: ${cookie ? cookie.value : 'missing'}`);
 
-    // Dacă nu există user IIS și nici cookie-ul, redirecționăm forțat către /login
+    // Dacă nu există cookie-ul, redirecționăm forțat către /login
     if (!cookie || cookie.value !== 'authenticated') {
-        const loginUrl = new URL('/login', request.url);
+        const host = request.headers.get('host') || '192.168.70.23:3000';
+        const protocol = request.headers.get('x-forwarded-proto') || 'http';
+        const loginUrl = new URL('/login', `${protocol}://${host}`);
         return NextResponse.redirect(loginUrl);
     }
 

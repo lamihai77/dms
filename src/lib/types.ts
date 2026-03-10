@@ -145,4 +145,8 @@ export interface ApiResponse<T> {
     data?: T;
     error?: string;
     total?: number;
+    _meta?: {
+        source?: string;
+        db?: string;
+    };
 }

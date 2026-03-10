@@ -40,6 +40,17 @@ export default function UsersPage() {
     const [editUser, setEditUser] = useState<User | null>(null);
     const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
     const [filterCategory, setFilterCategory] = useState<'all' | 'ad' | 'pf' | 'pj'>('all');
+    const [dataSource, setDataSource] = useState<string | null>(null);
+
+    // Stare pentru modalul de confirmare scriere cu 2 pași
+    const [confirmModal, setConfirmModal] = useState<{
+        isOpen: boolean;
+        action: 'status' | 'edit';
+        data: any;
+        diffs: any[];
+        title: string;
+        requireTyped?: string;
+    }>({ isOpen: false, action: 'status', data: null, diffs: [], title: '' });
 
     const showToast = (type: string, message: string) => {
         setToast({ type, message });
@@ -57,6 +68,7 @@ export default function UsersPage() {
             const data = await res.json();
             if (data.success) {
                 setUsers(data.data);
+                setDataSource(data._meta?.source || null);
                 if (data.data.length === 0) {
                     setError('Nu s-au găsit utilizatori');
                 }
@@ -86,41 +98,94 @@ export default function UsersPage() {
 
     const toggleStatus = async (user: User) => {
         const newStatus = user.ACTIV === 1 ? 0 : 1;
-        try {
-            const res = await fetch(`/api/users/${user.ID}/status`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ activ: newStatus }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                setUsers(users.map(u => u.ID === user.ID ? { ...u, ACTIV: newStatus } : u));
-                showToast('success', `Utilizatorul ${user.NUME} ${user.PRENUME} a fost ${newStatus ? 'activat' : 'dezactivat'}`);
-            }
-        } catch {
-            showToast('error', 'Eroare la actualizarea statusului');
-        }
+        setConfirmModal({
+            isOpen: true,
+            action: 'status',
+            data: user,
+            diffs: [{
+                field: 'Status (ACTIV)',
+                oldValue: user.ACTIV === 1 ? '1 (Activ)' : '0 (Inactiv)',
+                newValue: newStatus === 1 ? '1 (Activ)' : '0 (Inactiv)'
+            }],
+            title: `Schimbare status pentru: ${user.NUME} ${user.PRENUME}`,
+            requireTyped: 'CONFIRM' // Solicită tastare explicită pentru schimbări de statut / acces.
+        });
     };
 
     const handleSaveEdit = async (formData: Record<string, string>) => {
         if (!editUser) return;
-        try {
-            const res = await fetch(`/api/users/${editUser.ID}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData),
-            });
-            const data = await res.json();
-            if (data.success) {
-                showToast('success', 'Utilizatorul a fost actualizat');
-                setEditUser(null);
-                handleSearch(); // Refresh
-            } else {
-                showToast('error', data.error);
+
+        // Construim Diff-urile iterând pe cheile din formData
+        const diffs = [];
+        for (const key of Object.keys(formData)) {
+            const oldVal = (editUser as any)[key] || '';
+            const newVal = formData[key] || '';
+            if (String(oldVal) !== String(newVal)) {
+                diffs.push({
+                    field: key,
+                    oldValue: oldVal,
+                    newValue: newVal
+                });
             }
-        } catch {
-            showToast('error', 'Eroare la salvare');
         }
+
+        setConfirmModal({
+            isOpen: true,
+            action: 'edit',
+            data: { user: editUser, formData },
+            diffs,
+            title: `Actualizare date pentru: ${editUser.NUME} ${editUser.PRENUME}`
+            // Pentru editări simple, nu cerem type explicit CONFIRM, oprim doar prin diffs vizual.
+        });
+    };
+
+    // Funcția care execută efectiv scrierea după confirmare
+    const executeWriteAction = async () => {
+        const { action, data } = confirmModal;
+
+        if (action === 'status') {
+            const user = data as User;
+            const newStatus = user.ACTIV === 1 ? 0 : 1;
+            try {
+                const res = await fetch(`/api/users/${user.ID}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ activ: newStatus }),
+                });
+                const resData = await res.json();
+                if (resData.success) {
+                    setUsers(users.map(u => u.ID === user.ID ? { ...u, ACTIV: newStatus } : u));
+                    showToast('success', resData.data.idempotent
+                        ? `Idempotent: Statusul era deja setat corect. Nu a fost necesară nicio scriere în DB.`
+                        : `Succes: Utilizatorul ${user.NUME} ${user.PRENUME} a fost ${newStatus ? 'activat' : 'dezactivat'} in baza de date.`);
+                }
+            } catch {
+                showToast('error', 'Eroare la actualizarea statusului');
+            }
+        } else if (action === 'edit') {
+            const { user, formData } = data as { user: any, formData: Record<string, string> };
+            try {
+                const res = await fetch(`/api/users/${user.ID}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData),
+                });
+                const resData = await res.json();
+                if (resData.success) {
+                    showToast('success', resData.data.idempotent
+                        ? `Idempotent: Nicio modificare reală detectată față de DB. Nu s-a executat scrierea.`
+                        : `Succes: Utilizatorul a fost actualizat corect in baza de date.`);
+                    setEditUser(null);
+                    handleSearch(); // Refresh
+                } else {
+                    showToast('error', resData.error || 'Eroare la actualizare');
+                }
+            } catch {
+                showToast('error', 'Eroare la salvare');
+            }
+        }
+
+        setConfirmModal({ ...confirmModal, isOpen: false });
     };
 
     const formatDate = (d: string | null) => {
@@ -136,6 +201,11 @@ export default function UsersPage() {
             <div className="page-header">
                 <h2>👤 Gestiune Utilizatori</h2>
                 <p>Categorisire AD, PF, PJ și detalii contractuale</p>
+                {dataSource && (
+                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span role="img" aria-label="db">📖</span> Citit din: <strong>{dataSource}</strong>
+                    </div>
+                )}
             </div>
 
             {/* Search Card */}
@@ -197,6 +267,19 @@ export default function UsersPage() {
                 <div className="card" style={{ borderColor: 'var(--accent-danger)', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     {error}
                 </div>
+            )}
+
+            {/* Importăm componenta de validare cu doi pași */}
+            {confirmModal.isOpen && (
+                <ConfirmWriteModalWrapper
+                    isOpen={confirmModal.isOpen}
+                    actionTitle={confirmModal.title}
+                    tables={['DMS.UTILIZATORI']}
+                    diffs={confirmModal.diffs}
+                    requireTypedConfirm={confirmModal.requireTyped}
+                    onConfirm={executeWriteAction}
+                    onCancel={() => setConfirmModal({ ...confirmModal, isOpen: false, diffs: [] })}
+                />
             )}
 
             {/* Results Table */}
@@ -334,6 +417,10 @@ export default function UsersPage() {
         </div>
     );
 }
+
+// Import dinamic pentru componenta grea de vizualizare
+import dynamic from 'next/dynamic';
+const ConfirmWriteModalWrapper = dynamic(() => import('../../components/ConfirmWriteModal'), { ssr: false });
 
 interface Subaccount {
     ID: number;
