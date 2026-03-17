@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthUser, getUsername } from '@/lib/auth';
+import { getAuthUser, getUsername, isAllowedAdmin } from '@/lib/auth';
 
 /**
  * GET /api/me — Returns the currently authenticated user info
@@ -9,6 +9,10 @@ export async function GET(req: NextRequest) {
 
     if (!fullUser) {
         return NextResponse.json({ authenticated: false }, { status: 401 });
+    }
+
+    if (!isAllowedAdmin(fullUser)) {
+        return NextResponse.json({ authenticated: false }, { status: 403 });
     }
 
     const username = getUsername(fullUser);

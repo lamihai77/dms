@@ -19,11 +19,20 @@ export async function POST(req: NextRequest) {
     const authUser = getAuthUser(req) || 'system';
     const body = await req.json();
     const { keepId, removeIds } = body as { keepId: number; removeIds: number[] };
+    const keep = Number(keepId);
+    const removeUnique = Array.from(new Set((removeIds || []).map((id) => Number(id))))
+        .filter((id) => Number.isFinite(id) && id > 0);
 
-    if (!keepId || !removeIds || removeIds.length === 0) {
+    if (!Number.isFinite(keep) || keep <= 0 || removeUnique.length === 0) {
         return NextResponse.json<ApiResponse<null>>({
             success: false,
             error: 'Specifică keepId și removeIds',
+        }, { status: 400 });
+    }
+    if (removeUnique.includes(keep)) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'keepId nu poate exista în removeIds',
         }, { status: 400 });
     }
 
@@ -36,9 +45,9 @@ export async function POST(req: NextRequest) {
             const request = new sql.Request(transaction);
 
             // Step 1: Reassign users from removeIds to keepId
-            for (const removeId of removeIds) {
+            for (const removeId of removeUnique) {
                 await request
-                    .input(`keepId_${removeId}`, sql.Numeric, keepId)
+                    .input(`keepId_${removeId}`, sql.Numeric, keep)
                     .input(`removeId_${removeId}`, sql.Numeric, removeId)
                     .input(`mod_de_${removeId}`, sql.VarChar, getUsername(authUser))
                     .input(`mod_la_${removeId}`, sql.DateTime2, new Date())
@@ -54,7 +63,7 @@ export async function POST(req: NextRequest) {
             // Step 2: Delete redundant TERT records
             // NOTE: Only delete if no other FK references exist
             // For safety, we just mark them as BLOCAT instead of deleting
-            for (const removeId of removeIds) {
+            for (const removeId of removeUnique) {
                 const reqBlock = new sql.Request(transaction);
                 await reqBlock
                     .input('removeId', sql.Numeric, removeId)
@@ -65,8 +74,15 @@ export async function POST(req: NextRequest) {
             SET BLOCAT = 1,
                 MODIFICAT_DE = @mod_de,
                 MODIFICAT_LA = @mod_la,
-                INFO = ISNULL(INFO, '') + ' [DUPLICATE - BLOCAT automat, keepId referință]'
+                INFO = CASE 
+                    WHEN ISNULL(INFO, '') LIKE '%[DUPLICATE - BLOCAT automat, keepId referință]%' THEN INFO
+                    ELSE ISNULL(INFO, '') + ' [DUPLICATE - BLOCAT automat, keepId referință]'
+                END
             WHERE ID = @removeId
+              AND (
+                ISNULL(BLOCAT, 0) <> 1
+                OR ISNULL(INFO, '') NOT LIKE '%[DUPLICATE - BLOCAT automat, keepId referință]%'
+              )
           `);
             }
 
@@ -74,7 +90,7 @@ export async function POST(req: NextRequest) {
 
             return NextResponse.json<ApiResponse<{ processed: number }>>({
                 success: true,
-                data: { processed: removeIds.length },
+                data: { processed: removeUnique.length },
             });
         } catch (innerError) {
             await transaction.rollback();

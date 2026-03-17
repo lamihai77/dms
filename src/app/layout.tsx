@@ -41,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<UserInfo | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     fetch('/api/me')
@@ -48,6 +49,20 @@ function Sidebar() {
       .then(data => setUser(data))
       .catch(() => setUser(null));
   }, []);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      window.location.href = '/login';
+    } catch {
+      window.location.href = '/login';
+    }
+  };
 
   return (
     <aside className="sidebar">
@@ -82,6 +97,14 @@ function Sidebar() {
         <div className="user-info">
           <div className="user-name">{user?.username || 'Se încarcă...'}</div>
           <div className="user-role">INTERN\Domain Admins</div>
+          <button
+            type="button"
+            className="sidebar-logout"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+          >
+            {isLoggingOut ? 'Se închide sesiunea...' : 'Logoff'}
+          </button>
         </div>
       </div>
     </aside>
