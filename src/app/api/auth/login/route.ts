@@ -9,13 +9,13 @@ export async function POST(request: Request) {
         const password = (formData.get('password') as string || '');
         const shortUser = getUsername(username);
 
-        if (!shortUser || !password) {
-            return NextResponse.json({ ok: false, error: 'Invalid' }, { status: 401 });
-        }
-
-        if (!isAllowedAdmin(shortUser)) {
+        if (!shortUser || !isAllowedAdmin(shortUser)) {
             console.error(`[LOGIN API] User '${shortUser}' is not allowed by DOMAIN_ADMINS.`);
             return NextResponse.json({ ok: false, error: 'NoAccess' }, { status: 403 });
+        }
+
+        if (!password) {
+            return NextResponse.json({ ok: false, error: 'Invalid' }, { status: 401 });
         }
 
         const adOk = await validateAdCredentials(shortUser, password);

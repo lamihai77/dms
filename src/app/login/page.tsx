@@ -7,12 +7,16 @@ export default function LoginPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showAccessDeniedPopup, setShowAccessDeniedPopup] = useState(false);
 
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const err = params.get('error');
         if (err === 'Invalid') setErrorMessage('Parolă incorectă');
-        if (err === 'NoAccess') setErrorMessage('Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.');
+        if (err === 'NoAccess') {
+            setErrorMessage('Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.');
+            setShowAccessDeniedPopup(true);
+        }
         if (err === 'ServerFail') setErrorMessage('Eroare tehnică la Autentificare');
     }, []);
 
@@ -42,6 +46,7 @@ export default function LoginPage() {
                 setErrorMessage('Parolă incorectă');
             } else if (payload.error === 'NoAccess') {
                 setErrorMessage('Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.');
+                setShowAccessDeniedPopup(true);
             } else {
                 setErrorMessage('Eroare tehnică la Autentificare');
             }
@@ -60,6 +65,51 @@ export default function LoginPage() {
             justifyContent: 'center',
             backgroundColor: '#f1f5f9'
         }}>
+            {showAccessDeniedPopup && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 9999
+                }}>
+                    <div style={{
+                        width: '92%',
+                        maxWidth: '560px',
+                        background: 'white',
+                        borderRadius: '14px',
+                        boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+                        padding: '1.5rem'
+                    }}>
+                        <h3 style={{ margin: 0, marginBottom: '0.8rem', color: '#991b1b', fontSize: '1.2rem' }}>
+                            Acces neautorizat
+                        </h3>
+                        <p style={{ margin: 0, color: '#334155', lineHeight: 1.45 }}>
+                            Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.
+                        </p>
+                        <div style={{ marginTop: '1.2rem', textAlign: 'right' }}>
+                            <button
+                                type="button"
+                                onClick={() => setShowAccessDeniedPopup(false)}
+                                style={{
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    padding: '0.55rem 0.9rem',
+                                    background: '#b91c1c',
+                                    color: 'white',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Închide
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div style={{
                 background: 'white',
                 padding: '2.5rem',
