@@ -1,4 +1,4 @@
-DMS Admin — Operations Cheat Sheet
+# DMS Admin — Operations Cheat Sheet
 
 Daily deploy (with tagging)
 - Run as Administrator:
@@ -49,5 +49,12 @@ Quick troubleshooting
 Env and config
 - .env.local must exist in d:\Proiecte\dms (not in Git)
 - COOKIE_SECRET must be set; DOMAIN_ADMINS controls access
+- AD_DOMAIN must be set; login validates username/password against AD
 - Next runtime for crypto: export const runtime = 'nodejs' in auth/login route
+
+Auth behavior (current)
+- Login form uses `username` + `password`.
+- User not in DOMAIN_ADMINS => explicit access denied message ("adresați-vă departamentului IT").
+- User in DOMAIN_ADMINS but wrong password => "Parolă incorectă".
+- TEMP_LOGIN_PASSWORD is not used.
 - TypeScript path alias: imports under src use '@/...'

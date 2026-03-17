@@ -1,4 +1,4 @@
-Deploy & Rollback Guide — DMS Admin
+# Deploy & Rollback Guide — DMS Admin
 
 Overview
 - This document describes how to deploy, auto-start, verify, tag, and roll back the DMS Admin Next.js app on the LAN host.
@@ -6,7 +6,7 @@ Overview
 Pre-requisites
 - Repo path: d:\Proiecte\dms
 - Node.js installed (C:\Program Files\nodejs\node.exe)
-- .env.local present in repo root (COOKIE_SECRET, DOMAIN_ADMINS, AD_URL, AD_DOMAIN, DB_*)
+- .env.local present in repo root (COOKIE_SECRET, DOMAIN_ADMINS, AD_DOMAIN, DB_*)
 - Task Scheduler entry "DMS Admin Server" created (see below)
 
 Auto-start at boot
@@ -29,6 +29,13 @@ Health and logs
 - Logs on server:
   - d:\Proiecte\dms\logs\startup.log (who/when ran start script)
   - d:\Proiecte\dms\logs\server.log (Next.js output)
+
+Authentication model (current)
+- Login page requires username + password.
+- Credentials are validated against Active Directory (domain from AD_DOMAIN).
+- Access is granted only if username is present in DOMAIN_ADMINS.
+- For any username outside DOMAIN_ADMINS, UI shows explicit "Nu aveți dreptul..." message and blocks access.
+- TEMP_LOGIN_PASSWORD is not used in current flow.
 
 Standard deploy (with tagging)
 - Run as Administrator:
@@ -81,6 +88,8 @@ Troubleshooting
   - Stop-Process -Id <PID> -Force
 - Health 401/redirect on UI routes
   - /api/health is public; protected routes require valid session cookie and whitelist (DOMAIN_ADMINS)
+  - If login always shows "Nu aveți dreptul...", verify username exists in DOMAIN_ADMINS (short form, e.g. nume.prenume)
+  - If login shows "Parolă incorectă" for allowed users, verify AD_DOMAIN and AD connectivity from server
 
 Best practices
 - Keep .env.local out of Git; rotate exposed credentials

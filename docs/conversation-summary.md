@@ -1,4 +1,8 @@
-Comprehensive Technical Summary — DMS Admin (Conversation Record)
+# Comprehensive Technical Summary — DMS Admin (Conversation Record)
+
+Note (current state)
+- This document is a historical conversation record.
+- For operational truth, prioritize: `docs/deploy-rollback-guide.md`, `docs/ops-cheat-sheet.md`, `docs/technical-summary.md`.
 
 1) Conversation Overview
 - Goal: Bring the internal DMS Admin Next.js application to a clean, secure, and working state on a local LAN host (192.168.70.23:3000), restrict access to specific AD users (Domain Admins), enforce idempotent writes, sanitize code/config, and prepare for later PROD integration and Git workflows.
@@ -12,7 +16,7 @@ Comprehensive Technical Summary — DMS Admin (Conversation Record)
 - Authentication and Authorization (local dev, non-SSO):
   - Introduced HMAC-signed session cookie (createSessionCookie/parseSessionCookie) in src/lib/auth.ts.
   - Reworked requireDomainAdmin to only trust the signed cookie and whitelist (DOMAIN_ADMINS), returning 401 otherwise (and null on success for API guard).
-  - Removed implicit dev bypass password default; TEMP_LOGIN_PASSWORD only works if explicitly set in .env.local and only in development.
+  - Removed dev bypass password flow; login moved to AD username/password + DOMAIN_ADMINS whitelist.
   - In login API, switched to a direct import from '../../../lib/auth' and set runtime = 'nodejs' for Node crypto support. Wrote session cookie with httpOnly, sameSite=lax, and conditional secure flag.
 - Database and Queries:
   - Standardized all SQL to use schema DMS.<table> (UTILIZATORI, TERT, JUDET, LOCALITATE, SUBCONTURI).
@@ -30,12 +34,12 @@ Comprehensive Technical Summary — DMS Admin (Conversation Record)
 - Next config: App Router setup; API route needing Node crypto declares export const runtime = 'nodejs'.
 - TypeScript path alias: tsconfig.json defines '@/*' to map to src/*.
 - Database: Microsoft SQL Server via mssql (Node).
-- LDAP: ldapts.
+- AD validation: implemented via Windows domain credential validation (PowerShell + .NET AccountManagement).
 - Build status: Confirmed green after fixes (export alignment, relative import, cache clear, runtime = 'nodejs').
 
 4) File Operations (Created/Modified/Referenced)
 - Created:
-  - .env.example: Template for local environment variables (DB, AD, DOMAIN_ADMINS, COOKIE_SECRET, optional TEMP_LOGIN_PASSWORD).
+  - .env.example: Template for local environment variables (DB, AD, DOMAIN_ADMINS, COOKIE_SECRET).
 - Modified (key changes):
   - src/lib/db.ts: server fallback localhost; port 1433.
   - src/lib/auth.ts: HMAC utilities; getAuthUser; requireDomainAdmin tightened.
@@ -58,15 +62,15 @@ Comprehensive Technical Summary — DMS Admin (Conversation Record)
   - Identify PID and stop it; or run on alternate port (npm run dev -- -p 3001).
 - Login not working locally
   - Set COOKIE_SECRET in .env.local.
-  - For quick test, enable TEMP_LOGIN_PASSWORD and ensure username is in DOMAIN_ADMINS.
-  - For AD: verify 389/636 and choose ldap:// or ldaps:// accordingly.
+  - Use AD credentials; ensure username is in DOMAIN_ADMINS.
+  - If auth fails for allowed users, verify AD_DOMAIN and host connectivity to domain controller.
 
 6) Security Posture
 - Sensitive credentials were present in repository test files; these were removed/hardened and .gitignored. Recommendation: Immediately rotate any SQL/AD credentials that may have been exposed.
 
 7) Outstanding Work / Next Steps
 - Middleware modernization or simplification (Next 16 patterns).
-- Confirm final local login behavior (COOKIE_SECRET present; AD/LDAPS reachability if needed).
+- Confirm final login behavior (COOKIE_SECRET, AD_DOMAIN, DOMAIN_ADMINS).
 - Optional READ_ONLY_MODE to avoid write attempts against read-only DB.
 - Future PROD SSO: verify AD group membership via LDAP or rely on IIS Windows Auth + x-forwarded-user.
 - Git/CI hygiene: add secret scanning and protected branches.
@@ -79,9 +83,8 @@ Comprehensive Technical Summary — DMS Admin (Conversation Record)
 - Environment essentials:
   - COOKIE_SECRET=<random_long_string>
   - DOMAIN_ADMINS=<comma_separated_usernames>
-  - AD_URL=ldap://anre-ad-a01.intern.anre (or ldaps://…)
+  - AD_URL=ldap://anre-ad-a01.intern.anre (optional metadata; not used in runtime auth flow)
   - AD_DOMAIN=intern.anre
-  - TEMP_LOGIN_PASSWORD=<optional_for_dev>
   - DB_SERVER/DB_NAME/DB_USER/DB_PASSWORD (prefer non‑prod for local write tests)
 
 9) Build/Config Callouts (explicit mentions)

@@ -40,24 +40,34 @@ Variabilele de mediu sunt gestionate prin fișierele `.env.local` (exclus din Gi
 * **Git Repository:** GitHub `lamihai77/dms`
 * Credențialele (`.env.local`) sunt excluse strict prin `.gitignore`. Orice deployment trebuie să seteze aceste variabile de mediu individual pe serverul gazdă.
 
-### Flux de Deployment Automatizat (Git + PM2)
-Aplicația folosește un flux automatizat de deployment bazat pe GitHub și managerul de procese **PM2**.
+### Flux de Deployment Automatizat (Git + Task Scheduler)
+Aplicația folosește scripturi PowerShell + Task Scheduler pentru deployment și restart robust.
 
 **Pe mediul Local (Dezvoltare):**
 1. Modificare cod și testare locală (`npm run dev`).
 2. Trimitere modificări pe GitHub (`git push origin main`).
 
 **Pe Server (Producție):**
-1. Navigare în folderul aplicației (`cd C:\Proiecte\dms`).
-2. Rulare script automat: `.\deploy.bat`.
-   * Scriptul execută automat următorii pași: `git pull`, `pm2 kill`, `npm run build`, și `pm2 start`.
-   * Eliberează complet resursele node_modules evitând erori de tip EPERM.
-3. Aplicația este menținută online 24/7 de `ecosystem.config.js`.
+1. Rulează (Administrator):
+   `powershell -ExecutionPolicy Bypass -File "d:\Proiecte\dms\scripts\deploy-and-restart.ps1"`
+2. Scriptul execută: stop task, cleanup procese, `git pull`, `npm ci/install`, `npm run build`, start task.
+3. Validare automată:
+   - `/api/health` (HTTP 200)
+   - asset check pentru `/_next/static/...css` (evită UI "raw")
+4. La succes, setează markeri de rollback:
+   - `last-good.txt`
+   - tag `release-YYYY.MM.DD-HHMM`
+   - pointere `prod-last-good` și `deploy/prod`
 
-**Dacă se adaugă pachete noi (`npm install`):**
-Trebuie executat manual pe server o singură dată:
-```powershell
-pm2 kill
-npm install
-.\deploy.bat
-```
+### Rollback
+Rollback standard:
+`powershell -ExecutionPolicy Bypass -File "d:\Proiecte\dms\scripts\rollback.ps1"`
+
+Scriptul face rollback la `prod-last-good` (sau `last-good.txt` fallback), rebuild și restart.
+
+## 6. Autentificare și Control Acces
+- Login: formular `username + password`.
+- Validare credențiale: Active Directory (`AD_DOMAIN`).
+- Autorizare aplicație: whitelist strict `DOMAIN_ADMINS`.
+- Orice user în afara whitelistului primește mesaj explicit:
+  "Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT."

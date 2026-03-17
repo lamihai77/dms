@@ -1,4 +1,4 @@
-Technical Summary — DMS Admin (Local Dev Session)
+# Technical Summary — DMS Admin (Local Dev Session)
 
 Scope
 - Capture the key configuration and security decisions so the app can be started safely on a LAN host and revisited later.
@@ -10,8 +10,9 @@ Core Configuration
 - Build status: Build validated successfully after fixes (auth import/export, cache clear, runtime = 'nodejs').
 
 Authentication & Authorization
-- Local dev uses an HMAC‑signed session cookie; only users in DOMAIN_ADMINS are allowed.
-- TEMP_LOGIN_PASSWORD is optional for local testing and only active if explicitly set.
+- Session uses an HMAC-signed cookie (`dms_admin_auth`).
+- Login validates username/password against AD domain (`AD_DOMAIN`) and then enforces whitelist (`DOMAIN_ADMINS`).
+- Users outside `DOMAIN_ADMINS` receive explicit "Nu aveți dreptul..." error in UI.
 
 Database & Security
 - SQL Server via mssql; default local dev server localhost, port 1433.
@@ -28,8 +29,8 @@ Remote Access & Firewall
 Operational Tips
 - Start (dev): npm run dev (use -- -p 3001 if 3000 is busy).
 - Start (prod): start-server.bat pornește Next cu node direct și verifică /api/health; Task Scheduler pornește app la boot (DMS Admin Server).
-- Ensure COOKIE_SECRET is set in .env.local; optionally set TEMP_LOGIN_PASSWORD for quick testing.
-- If AD login is required, verify LDAP/LDAPS reachability and use AD_URL=ldap://… or ldaps://… as appropriate.
+- Ensure COOKIE_SECRET, AD_DOMAIN and DOMAIN_ADMINS are set in .env.local.
+- Verify AD connectivity from host if allowed users cannot authenticate.
 
 Deployment & Rollback (Server)
 - Deploy/Restart automat: scripts/deploy-and-restart.ps1 (vezi și docs/deploy-rollback-guide.md și docs/ops-cheat-sheet.md)
@@ -48,4 +49,4 @@ Housekeeping
 - .env.local must not be committed.
 - Add/keep secret scanning in CI; protect branches.
 
-With these settings, the app runs locally with a signed cookie gate, the tsconfig alias '@/*', the required runtime='nodejs' where needed, and with the build confirmed green after fixes. Exposed test credentials have been removed/hardened; rotate any potentially exposed passwords immediately.
+With these settings, the app runs with signed cookie sessions, AD-backed login, DOMAIN_ADMINS whitelist enforcement, the tsconfig alias '@/*', and runtime='nodejs' where needed. Exposed test credentials have been removed/hardened; rotate any potentially exposed passwords immediately.
