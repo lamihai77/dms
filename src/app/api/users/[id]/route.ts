@@ -7,6 +7,21 @@ interface RouteParams {
     params: Promise<{ id: string }>;
 }
 
+type SanitizedUtilizator = Omit<Utilizator, 'CHEIE_SECURITATE' | 'parola_c'>;
+
+function pickEncryptedPassword(row: Record<string, unknown>): string {
+    const candidates = ['PAROLA', 'parola_c', 'PAROLA_C', 'CHEIE_SECURITATE'] as const;
+    for (const key of candidates) {
+        const value = row[key];
+        if (typeof value !== 'string') continue;
+        const normalized = value.trim();
+        if (!normalized) continue;
+        if (normalized.toLowerCase() === 'null') continue;
+        return normalized;
+    }
+    return '';
+}
+
 /**
  * GET /api/users/[id] — Get a single user with full details
  */
@@ -50,18 +65,14 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         }
 
         const safeUser = { ...result.recordset[0] } as Record<string, unknown>;
-        const parola = typeof safeUser.PAROLA === 'string' ? safeUser.PAROLA : '';
-        const parolaLegacy = typeof safeUser.parola_c === 'string' ? safeUser.parola_c : '';
-        if (!parola && parolaLegacy) {
-            // Compatibilitate cu utilizatorii existenți unde hash-ul este în coloana legacy.
-            safeUser.PAROLA = parolaLegacy;
-        }
+        // Compatibilitate extinsă: PAROLA (curent), parola_c/PAROLA_C (legacy), CHEIE_SECURITATE (instanțe vechi)
+        safeUser.PAROLA = pickEncryptedPassword(safeUser);
         delete safeUser.parola_c;
         delete safeUser.CHEIE_SECURITATE;
 
-        return NextResponse.json<ApiResponse<Utilizator>>({
+        return NextResponse.json<ApiResponse<SanitizedUtilizator>>({
             success: true,
-            data: safeUser,
+            data: safeUser as SanitizedUtilizator,
         });
     } catch (error) {
         console.error('Error fetching user:', error);
