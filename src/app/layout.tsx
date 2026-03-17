@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Roluri', href: '/roles', icon: '🔑', section: 'Administrare' },
   { label: 'Companii (TERT)', href: '/companies', icon: '🏢', section: 'Companii' },
   { label: 'Curățare Duplicate', href: '/cleanup', icon: '🧹', section: 'Companii' },
+  { label: 'Manuale', href: '/manuale', icon: '📚', section: 'Documentație' },
 ];
 
 interface UserInfo {
@@ -82,7 +83,7 @@ function Sidebar() {
               )}
               <Link
                 href={item.href}
-                className={pathname === item.href ? 'active' : ''}
+                className={pathname === item.href || pathname.startsWith(`${item.href}/`) ? 'active' : ''}
               >
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}

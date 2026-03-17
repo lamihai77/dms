@@ -15,10 +15,18 @@ export async function GET(
     if (authError) return authError;
 
     const { id: userId } = await params;
+    const parsedUserId = Number(userId);
+    if (!Number.isInteger(parsedUserId) || parsedUserId <= 0) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'ID invalid',
+        }, { status: 400 });
+    }
+
     try {
         const pool = await getDb();
         const result = await pool.request()
-            .input('userId', sql.VarChar, userId)
+            .input('userId', sql.Int, parsedUserId)
             .query(`
                 SELECT 
                     S.ID,

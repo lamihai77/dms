@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, sql } from '@/lib/db';
-import { requireDomainAdmin } from '@/lib/auth';
+import { requireDomainAdmin, getAuthUser, getUsername } from '@/lib/auth';
 import { ApiResponse } from '@/lib/types';
 
 interface RouteParams {
@@ -18,6 +18,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const userId = parseInt(id);
     const body = await req.json();
     const { activ } = body;
+    const authUser = getAuthUser(req) || 'system';
 
     // Strict value bounds checking
     if (activ !== 0 && activ !== 1) {
@@ -37,18 +38,19 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     try {
         const pool = await getDb();
         const updateResult = await pool.request()
-            .input('id', sql.Numeric, userId)
-            .input('activ', sql.Numeric, activ)
+            .input('id', sql.Int, userId)
+            .input('activ', sql.Int, activ)
+            .input('modificat_de', sql.VarChar, getUsername(authUser))
             .input('modificat_la', sql.DateTime2, new Date())
             .query(`
-        UPDATE UTILIZATORI 
-        SET ACTIV = @activ, MODIFICAT_LA = @modificat_la
+        UPDATE DMS.UTILIZATORI 
+        SET ACTIV = @activ, MODIFICAT_DE = @modificat_de, MODIFICAT_LA = @modificat_la
         WHERE ID = @id AND ISNULL(ACTIV, -1) <> @activ
       `);
 
         const existsResult = await pool.request()
-            .input('id', sql.Numeric, userId)
-            .query(`SELECT ACTIV FROM UTILIZATORI WHERE ID = @id`);
+            .input('id', sql.Int, userId)
+            .query(`SELECT ACTIV FROM DMS.UTILIZATORI WHERE ID = @id`);
 
         if (existsResult.recordset.length === 0) {
             return NextResponse.json<ApiResponse<null>>({

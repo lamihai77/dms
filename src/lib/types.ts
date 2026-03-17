@@ -112,9 +112,9 @@ export interface UserUpdateData {
     NUME?: string;
     PRENUME?: string;
     EMAIL?: string;
+    PAROLA?: string;
     ACTIV?: number;
     LOCKED?: number;
-    PAROLA?: string;
     ticket_emails?: string;
     adrese_mail_alternative?: string;
 }

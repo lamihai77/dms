@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
         COUNT(*) AS record_count,
         STRING_AGG(CAST(T.ID AS VARCHAR), ',') AS tert_ids,
         STRING_AGG(T.NUME, ' | ') AS tert_names
-      FROM TERT T
+      FROM DMS.TERT T
       WHERE T.COD_CUI IS NOT NULL 
         AND T.COD_CUI != ''
       GROUP BY T.COD_CUI
@@ -31,15 +31,25 @@ export async function GET(req: NextRequest) {
         // For each duplicate, get detailed info
         const duplicates = [];
         for (const row of result.recordset.slice(0, 20)) {
-            const ids = row.tert_ids.split(',').map((id: string) => parseInt(id));
+            const ids = String(row.tert_ids || '')
+                .split(',')
+                .map((id: string) => Number(id))
+                .filter((id: number) => Number.isInteger(id) && id > 0);
+            if (ids.length === 0) continue;
+
+            const allocRequest = pool.request();
+            const inParams: string[] = [];
+            ids.forEach((id: number, index: number) => {
+                const key = `id${index}`;
+                inParams.push(`@${key}`);
+                allocRequest.input(key, sql.Int, id);
+            });
 
             // Check which IDs are allocated to users
-            const allocResult = await pool.request()
-                .input('ids', sql.VarChar, row.tert_ids)
-                .query(`
+            const allocResult = await allocRequest.query(`
           SELECT U.ID AS USER_ID, U.NUME, U.PRENUME, U.EMAIL, U.ID_TERT
-          FROM UTILIZATORI U
-          WHERE U.ID_TERT IN (${ids.map((id: number) => `${id}`).join(',')})
+          FROM DMS.UTILIZATORI U
+          WHERE U.ID_TERT IN (${inParams.join(',')})
         `);
 
             duplicates.push({

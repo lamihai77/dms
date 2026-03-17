@@ -26,6 +26,18 @@ export async function GET(req: NextRequest) {
             error: 'Specifică un criteriu de căutare',
         }, { status: 400 });
     }
+    if (searchVal.length < 2) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'Criteriul de căutare trebuie să aibă minim 2 caractere',
+        }, { status: 400 });
+    }
+    if (searchVal.length > 120) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'Criteriul de căutare este prea lung',
+        }, { status: 400 });
+    }
 
     try {
         const pool = await getDb();

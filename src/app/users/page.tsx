@@ -8,6 +8,7 @@ interface User {
     PRENUME: string;
     USERNAME: string;
     EMAIL: string;
+    PAROLA?: string | null;
     ACTIV: number;
     LOCKED: number;
     LOCKED_AT: string | null;
@@ -32,6 +33,11 @@ interface User {
     NR_SUBCONTURI?: number | null;
 }
 
+interface EditPayload {
+    user: User;
+    formData: Record<string, string | number>;
+}
+
 export default function UsersPage() {
     const [searchValue, setSearchValue] = useState('');
     const [users, setUsers] = useState<User[]>([]);
@@ -46,8 +52,8 @@ export default function UsersPage() {
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
         action: 'status' | 'edit';
-        data: any;
-        diffs: any[];
+        data: User | EditPayload | null;
+        diffs: Array<{ field: string; oldValue: string; newValue: string }>;
         title: string;
         requireTyped?: string;
     }>({ isOpen: false, action: 'status', data: null, diffs: [], title: '' });
@@ -112,14 +118,14 @@ export default function UsersPage() {
         });
     };
 
-    const handleSaveEdit = async (formData: Record<string, string>) => {
+    const handleSaveEdit = async (formData: Record<string, string | number>) => {
         if (!editUser) return;
 
         // Construim Diff-urile iterând pe cheile din formData
-        const diffs = [];
+        const diffs: Array<{ field: string; oldValue: string; newValue: string }> = [];
         for (const key of Object.keys(formData)) {
-            const oldVal = (editUser as any)[key] || '';
-            const newVal = formData[key] || '';
+            const oldVal = String((editUser as unknown as Record<string, unknown>)[key] ?? '');
+            const newVal = String(formData[key] ?? '');
             if (String(oldVal) !== String(newVal)) {
                 diffs.push({
                     field: key,
@@ -134,14 +140,15 @@ export default function UsersPage() {
             action: 'edit',
             data: { user: editUser, formData },
             diffs,
-            title: `Actualizare date pentru: ${editUser.NUME} ${editUser.PRENUME}`
-            // Pentru editări simple, nu cerem type explicit CONFIRM, oprim doar prin diffs vizual.
+            title: `Actualizare date pentru: ${editUser.NUME} ${editUser.PRENUME}`,
+            requireTyped: diffs.some((d) => d.field === 'PAROLA' || d.field === 'ACTIV') ? 'CONFIRM' : undefined
         });
     };
 
     // Funcția care execută efectiv scrierea după confirmare
     const executeWriteAction = async () => {
         const { action, data } = confirmModal;
+        if (!data) return;
 
         if (action === 'status') {
             const user = data as User;
@@ -158,12 +165,15 @@ export default function UsersPage() {
                     showToast('success', resData.data.idempotent
                         ? `Idempotent: Statusul era deja setat corect. Nu a fost necesară nicio scriere în DB.`
                         : `Succes: Utilizatorul ${user.NUME} ${user.PRENUME} a fost ${newStatus ? 'activat' : 'dezactivat'} in baza de date.`);
+                    if (searchValue.trim()) {
+                        handleSearch();
+                    }
                 }
             } catch {
                 showToast('error', 'Eroare la actualizarea statusului');
             }
         } else if (action === 'edit') {
-            const { user, formData } = data as { user: any, formData: Record<string, string> };
+            const { user, formData } = data as EditPayload;
             try {
                 const res = await fetch(`/api/users/${user.ID}`, {
                     method: 'PUT',
@@ -186,6 +196,20 @@ export default function UsersPage() {
         }
 
         setConfirmModal({ ...confirmModal, isOpen: false });
+    };
+
+    const openEditModal = async (user: User) => {
+        try {
+            const res = await fetch(`/api/users/${user.ID}`);
+            const data = await res.json();
+            if (data.success && data.data) {
+                setEditUser(data.data as User);
+                return;
+            }
+            showToast('error', data.error || 'Nu s-au putut încărca detaliile utilizatorului');
+        } catch {
+            showToast('error', 'Eroare la încărcarea detaliilor utilizatorului');
+        }
     };
 
     const formatDate = (d: string | null) => {
@@ -321,6 +345,7 @@ export default function UsersPage() {
                                         </>
                                     )}
                                     <th>Acțiuni</th>
+                                    <th>Ultima modificare</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -384,10 +409,16 @@ export default function UsersPage() {
                                         <td>
                                             <button
                                                 className="btn btn-ghost btn-sm"
-                                                onClick={() => setEditUser(user)}
+                                                onClick={() => openEditModal(user)}
                                             >
                                                 ✏️ Detalii
                                             </button>
+                                        </td>
+                                        <td>
+                                            <div style={{ fontSize: '0.78rem' }}>
+                                                <strong>{user.MODIFICAT_DE || '—'}</strong>
+                                                <div style={{ color: 'var(--text-muted)' }}>{formatDate(user.MODIFICAT_LA)}</div>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -435,11 +466,13 @@ interface Subaccount {
     TERT_LOCALITATE: string | null;
 }
 
-function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => void, onSave: (data: Record<string, string>) => void }) {
+function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => void, onSave: (data: Record<string, string | number>) => void }) {
     const [formData, setFormData] = useState({
         NUME: user.NUME || '',
         PRENUME: user.PRENUME || '',
         EMAIL: user.EMAIL || '',
+        PAROLA: user.PAROLA || '',
+        ACTIV: user.ACTIV ?? 0,
         ticket_emails: user.ticket_emails || '',
         adrese_mail_alternative: user.adrese_mail_alternative || '',
     });
@@ -459,7 +492,7 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                 } else {
                     setSubError(data.error || 'Eroare necunoscută la API');
                 }
-            } catch (error) {
+            } catch {
                 setSubError('Nu s-a putut contacta serverul');
             }
             setLoadingSubs(false);
@@ -467,8 +500,12 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
         fetchSubaccounts();
     }, [user.ID]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData({
+            ...formData,
+            [name]: name === 'ACTIV' ? Number(value) : value
+        });
     };
 
     return (
@@ -504,6 +541,24 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                     <div className="form-group">
                         <label>Email Principal</label>
                         <input name="EMAIL" value={formData.EMAIL} onChange={handleChange} />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Parolă (valoare criptată)</label>
+                        <input
+                            name="PAROLA"
+                            value={formData.PAROLA}
+                            onChange={handleChange}
+                            placeholder="Valoare criptată din DB"
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label>Status utilizator</label>
+                        <select name="ACTIV" value={String(formData.ACTIV)} onChange={handleChange}>
+                            <option value="1">Activ</option>
+                            <option value="0">Inactiv</option>
+                        </select>
                     </div>
 
                     <div className="form-group">
@@ -582,6 +637,8 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                             <div><strong>Locked:</strong> {user.LOCKED ? 'Da' : 'Nu'}</div>
                             <div><strong>LDAP:</strong> {user.USERNAME_LDAP || '—'}</div>
                             <div><strong>Creat la:</strong> {user.CREAT_LA ? new Date(user.CREAT_LA).toLocaleDateString() : '—'}</div>
+                            <div><strong>Ultima modificare de:</strong> {user.MODIFICAT_DE || '—'}</div>
+                            <div><strong>Ultima modificare la:</strong> {user.MODIFICAT_LA ? new Date(user.MODIFICAT_LA).toLocaleString('ro-RO') : '—'}</div>
                         </div>
                     </div>
                 </div>
