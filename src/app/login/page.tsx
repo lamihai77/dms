@@ -12,6 +12,7 @@ export default function LoginPage() {
         const params = new URLSearchParams(window.location.search);
         const err = params.get('error');
         if (err === 'Invalid') setErrorMessage('Parolă incorectă');
+        if (err === 'NoAccess') setErrorMessage('Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.');
         if (err === 'ServerFail') setErrorMessage('Eroare tehnică la Autentificare');
     }, []);
 
@@ -39,6 +40,8 @@ export default function LoginPage() {
             const payload = await response.json().catch(() => ({} as { error?: string }));
             if (payload.error === 'Invalid') {
                 setErrorMessage('Parolă incorectă');
+            } else if (payload.error === 'NoAccess') {
+                setErrorMessage('Nu aveți dreptul să accesați aplicația. Vă rugăm să vă adresați departamentului IT.');
             } else {
                 setErrorMessage('Eroare tehnică la Autentificare');
             }

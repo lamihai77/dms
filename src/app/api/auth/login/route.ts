@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
         if (!isAllowedAdmin(shortUser)) {
             console.error(`[LOGIN API] User '${shortUser}' is not allowed by DOMAIN_ADMINS.`);
-            return NextResponse.json({ ok: false, error: 'Invalid' }, { status: 403 });
+            return NextResponse.json({ ok: false, error: 'NoAccess' }, { status: 403 });
         }
 
         const adOk = await validateAdCredentials(shortUser, password);
