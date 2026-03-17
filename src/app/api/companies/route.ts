@@ -12,9 +12,22 @@ export async function GET(req: NextRequest) {
     if (authError) return authError;
 
     const { searchParams } = new URL(req.url);
-    const cui = searchParams.get('cui');
-    const denumire = searchParams.get('denumire');
+    const cui = searchParams.get('cui')?.trim();
+    const denumire = searchParams.get('denumire')?.trim();
     const userId = searchParams.get('userId');
+
+    if (cui && cui.length > 64) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'CUI prea lung',
+        }, { status: 400 });
+    }
+    if (denumire && denumire.length > 120) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'Denumire prea lungă',
+        }, { status: 400 });
+    }
 
     try {
         const pool = await getDb();
@@ -30,9 +43,16 @@ export async function GET(req: NextRequest) {
             request.input('denumire', sql.NVarChar, `%${denumire}%`);
         }
         if (userId) {
+            const parsedUserId = Number(userId);
+            if (!Number.isInteger(parsedUserId) || parsedUserId <= 0) {
+                return NextResponse.json<ApiResponse<null>>({
+                    success: false,
+                    error: 'userId invalid',
+                }, { status: 400 });
+            }
             // Find the TERT associated with a specific user
-            conditions.push('T.ID IN (SELECT ID_TERT FROM UTILIZATORI WHERE ID = @userId AND ID_TERT IS NOT NULL)');
-            request.input('userId', sql.Numeric, parseInt(userId));
+            conditions.push('T.ID IN (SELECT ID_TERT FROM DMS.UTILIZATORI WHERE ID = @userId AND ID_TERT IS NOT NULL)');
+            request.input('userId', sql.Int, parsedUserId);
         }
 
         if (conditions.length === 0) {
@@ -75,7 +95,7 @@ export async function GET(req: NextRequest) {
         T.CREAT_LA,
         T.MODIFICAT_DE,
         T.MODIFICAT_LA
-      FROM TERT T
+      FROM DMS.TERT T
       WHERE ${whereClause}
       ORDER BY T.NUME
     `);

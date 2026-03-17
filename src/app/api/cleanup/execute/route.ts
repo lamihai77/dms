@@ -44,33 +44,66 @@ export async function POST(req: NextRequest) {
         try {
             const request = new sql.Request(transaction);
 
+            // Pre-flight safety checks: keepId must exist; removeIds must all exist.
+            const keepExists = await request
+                .input('keepId', sql.Int, keep)
+                .query(`SELECT TOP 1 ID FROM DMS.TERT WHERE ID = @keepId`);
+            if (keepExists.recordset.length === 0) {
+                await transaction.rollback();
+                return NextResponse.json<ApiResponse<null>>({
+                    success: false,
+                    error: 'keepId nu există în DMS.TERT',
+                }, { status: 400 });
+            }
+
+            const existsReq = new sql.Request(transaction);
+            const existsInParams: string[] = [];
+            removeUnique.forEach((id, index) => {
+                const k = `rid${index}`;
+                existsInParams.push(`@${k}`);
+                existsReq.input(k, sql.Int, id);
+            });
+            const removeExists = await existsReq.query(`
+              SELECT ID FROM DMS.TERT WHERE ID IN (${existsInParams.join(',')})
+            `);
+            if (removeExists.recordset.length !== removeUnique.length) {
+                await transaction.rollback();
+                return NextResponse.json<ApiResponse<null>>({
+                    success: false,
+                    error: 'Unul sau mai multe removeIds nu există în DMS.TERT',
+                }, { status: 400 });
+            }
+
             // Step 1: Reassign users from removeIds to keepId
+            let reassignedUsers = 0;
             for (const removeId of removeUnique) {
-                await request
-                    .input(`keepId_${removeId}`, sql.Numeric, keep)
-                    .input(`removeId_${removeId}`, sql.Numeric, removeId)
+                const updateUsersResult = await request
+                    .input(`keepId_${removeId}`, sql.Int, keep)
+                    .input(`removeId_${removeId}`, sql.Int, removeId)
                     .input(`mod_de_${removeId}`, sql.VarChar, getUsername(authUser))
                     .input(`mod_la_${removeId}`, sql.DateTime2, new Date())
                     .query(`
-            UPDATE UTILIZATORI 
+            UPDATE DMS.UTILIZATORI 
             SET ID_TERT = @keepId_${removeId},
                 MODIFICAT_DE = @mod_de_${removeId},
                 MODIFICAT_LA = @mod_la_${removeId}
             WHERE ID_TERT = @removeId_${removeId}
           `);
+                reassignedUsers += updateUsersResult.rowsAffected?.[0] || 0;
             }
 
             // Step 2: Delete redundant TERT records
             // NOTE: Only delete if no other FK references exist
             // For safety, we just mark them as BLOCAT instead of deleting
+            let blockedTerts = 0;
             for (const removeId of removeUnique) {
                 const reqBlock = new sql.Request(transaction);
-                await reqBlock
-                    .input('removeId', sql.Numeric, removeId)
+                const blockResult = await reqBlock
+                    .input('removeId', sql.Int, removeId)
                     .input('mod_de', sql.VarChar, getUsername(authUser))
                     .input('mod_la', sql.DateTime2, new Date())
                     .query(`
-            UPDATE TERT 
+            UPDATE DMS.TERT 
             SET BLOCAT = 1,
                 MODIFICAT_DE = @mod_de,
                 MODIFICAT_LA = @mod_la,
@@ -84,13 +117,19 @@ export async function POST(req: NextRequest) {
                 OR ISNULL(INFO, '') NOT LIKE '%[DUPLICATE - BLOCAT automat, keepId referință]%'
               )
           `);
+                blockedTerts += blockResult.rowsAffected?.[0] || 0;
             }
 
             await transaction.commit();
 
-            return NextResponse.json<ApiResponse<{ processed: number }>>({
+            return NextResponse.json<ApiResponse<{ processed: number; idempotent: boolean; reassignedUsers: number; blockedTerts: number }>>({
                 success: true,
-                data: { processed: removeUnique.length },
+                data: {
+                    processed: removeUnique.length,
+                    idempotent: reassignedUsers === 0 && blockedTerts === 0,
+                    reassignedUsers,
+                    blockedTerts,
+                },
             });
         } catch (innerError) {
             await transaction.rollback();

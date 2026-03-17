@@ -1,11 +1,24 @@
 import sql from 'mssql';
 
+function requireEnv(name: string, fallback?: string): string {
+    const value = process.env[name] ?? fallback;
+    if (!value || value.trim() === '') {
+        throw new Error(`[DB] Missing required environment variable: ${name}`);
+    }
+    return value;
+}
+
+const dbPort = parseInt(process.env.DB_PORT || '1433', 10);
+if (!Number.isFinite(dbPort) || dbPort <= 0 || dbPort > 65535) {
+    throw new Error('[DB] Invalid DB_PORT. Expected integer in range 1..65535');
+}
+
 const config: sql.config = {
-    server: process.env.DB_SERVER || '192.168.12.101',
-    port: parseInt(process.env.DB_PORT || '1443'),
-    database: process.env.DB_NAME || 'dms_dev',
-    user: process.env.DB_USER || '',
-    password: process.env.DB_PASSWORD || '',
+    server: requireEnv('DB_SERVER', 'localhost'),
+    port: dbPort,
+    database: requireEnv('DB_NAME', 'dms_dev'),
+    user: requireEnv('DB_USER'),
+    password: requireEnv('DB_PASSWORD'),
     options: {
         encrypt: false,
         trustServerCertificate: true,
