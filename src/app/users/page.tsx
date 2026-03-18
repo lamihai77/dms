@@ -46,6 +46,20 @@ interface StatusPayload {
     expectedModificatLa: string | null;
 }
 
+interface TableFilters {
+    status: 'all' | 'active' | 'inactive';
+    denumire: string;
+    cuiCnp: string;
+    email: string;
+    username: string;
+    subconturi: 'all' | 'none' | 'has';
+    tip: 'all' | 'pf' | 'pj';
+    tertNume: string;
+    modificare: string;
+    judet: string;
+    localitate: string;
+}
+
 export default function UsersPage() {
     const [searchValue, setSearchValue] = useState('');
     const [users, setUsers] = useState<User[]>([]);
@@ -55,6 +69,19 @@ export default function UsersPage() {
     const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
     const [filterCategory, setFilterCategory] = useState<'all' | 'ad' | 'pf' | 'pj'>('all');
     const [dataSource, setDataSource] = useState<string | null>(null);
+    const [tableFilters, setTableFilters] = useState<TableFilters>({
+        status: 'all',
+        denumire: '',
+        cuiCnp: '',
+        email: '',
+        username: '',
+        subconturi: 'all',
+        tip: 'all',
+        tertNume: '',
+        modificare: '',
+        judet: '',
+        localitate: '',
+    });
 
     // Stare pentru modalul de confirmare scriere cu 2 pași
     const [confirmModal, setConfirmModal] = useState<{
@@ -106,6 +133,38 @@ export default function UsersPage() {
 
         // PJ = Persoane Juridice (Linked to a tert where PERS_FIZ = 0 or it has a CUI)
         if (filterCategory === 'pj') return !!user.TERT_CUI;
+
+        return true;
+    });
+
+    const tableVisibleUsers = filteredUsers.filter((user) => {
+        if (tableFilters.status === 'active' && user.ACTIV !== 1) return false;
+        if (tableFilters.status === 'inactive' && user.ACTIV !== 0) return false;
+
+        const denumire = `${user.NUME || ''} ${user.PRENUME || ''}`.toLowerCase();
+        if (tableFilters.denumire && !denumire.includes(tableFilters.denumire.toLowerCase())) return false;
+
+        const cuiCnp = `${user.TERT_CUI || ''} ${user.TERT_CNP || ''}`.toLowerCase();
+        if (tableFilters.cuiCnp && !cuiCnp.includes(tableFilters.cuiCnp.toLowerCase())) return false;
+
+        if (tableFilters.email && !(user.EMAIL || '').toLowerCase().includes(tableFilters.email.toLowerCase())) return false;
+        if (tableFilters.username && !(user.USERNAME || '').toLowerCase().includes(tableFilters.username.toLowerCase())) return false;
+
+        const nrSubconturi = Number(user.NR_SUBCONTURI || 0);
+        if (tableFilters.subconturi === 'none' && nrSubconturi > 0) return false;
+        if (tableFilters.subconturi === 'has' && nrSubconturi <= 0) return false;
+
+        if (tableFilters.tip === 'pf' && !user.TERT_CNP) return false;
+        if (tableFilters.tip === 'pj' && !user.TERT_CUI) return false;
+
+        if (tableFilters.tertNume && !(user.TERT_NUME || '').toLowerCase().includes(tableFilters.tertNume.toLowerCase())) return false;
+        if (tableFilters.judet && !(user.TERT_JUDET || '').toLowerCase().includes(tableFilters.judet.toLowerCase())) return false;
+        if (tableFilters.localitate && !(user.TERT_LOCALITATE || '').toLowerCase().includes(tableFilters.localitate.toLowerCase())) return false;
+
+        if (tableFilters.modificare) {
+            const modText = `${user.MODIFICAT_DE || ''} ${formatDate(user.MODIFICAT_LA)}`.toLowerCase();
+            if (!modText.includes(tableFilters.modificare.toLowerCase())) return false;
+        }
 
         return true;
     });
@@ -376,7 +435,7 @@ export default function UsersPage() {
                                     filterCategory === 'pf' ? 'Persoane Fizice' :
                                         filterCategory === 'pj' ? 'Persoane Juridice' :
                                             'Toți'
-                            } ({filteredUsers.length})
+                            } ({tableVisibleUsers.length}/{filteredUsers.length})
                         </h3>
                     </div>
                     <div className="data-table-wrapper">
@@ -407,9 +466,140 @@ export default function UsersPage() {
                                     <th>Acțiuni</th>
                                     <th>Ultima modificare</th>
                                 </tr>
+                                <tr>
+                                    <th>
+                                        <select
+                                            value={tableFilters.status}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, status: e.target.value as TableFilters['status'] }))}
+                                            style={{ width: '100%' }}
+                                        >
+                                            <option value="all">Toate</option>
+                                            <option value="active">Activ</option>
+                                            <option value="inactive">Inactiv</option>
+                                        </select>
+                                    </th>
+                                    <th>
+                                        <input
+                                            value={tableFilters.denumire}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, denumire: e.target.value }))}
+                                            placeholder="Filtru denumire"
+                                        />
+                                    </th>
+                                    <th>
+                                        <input
+                                            value={tableFilters.cuiCnp}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, cuiCnp: e.target.value }))}
+                                            placeholder="CUI/CNP"
+                                        />
+                                    </th>
+                                    <th>
+                                        <input
+                                            value={tableFilters.email}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, email: e.target.value }))}
+                                            placeholder="Email"
+                                        />
+                                    </th>
+                                    <th>
+                                        <input
+                                            value={tableFilters.username}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, username: e.target.value }))}
+                                            placeholder="Username"
+                                        />
+                                    </th>
+
+                                    {filterCategory === 'pj' ? (
+                                        <>
+                                            <th>
+                                                <input
+                                                    value={tableFilters.judet}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, judet: e.target.value }))}
+                                                    placeholder="Județ"
+                                                />
+                                            </th>
+                                            <th>
+                                                <input
+                                                    value={tableFilters.localitate}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, localitate: e.target.value }))}
+                                                    placeholder="Localitate"
+                                                />
+                                            </th>
+                                            <th>
+                                                <select
+                                                    value={tableFilters.subconturi}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, subconturi: e.target.value as TableFilters['subconturi'] }))}
+                                                    style={{ width: '100%' }}
+                                                >
+                                                    <option value="all">Toate</option>
+                                                    <option value="none">Fără</option>
+                                                    <option value="has">Cu</option>
+                                                </select>
+                                            </th>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <th>
+                                                <select
+                                                    value={tableFilters.subconturi}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, subconturi: e.target.value as TableFilters['subconturi'] }))}
+                                                    style={{ width: '100%' }}
+                                                >
+                                                    <option value="all">Toate</option>
+                                                    <option value="none">Fără</option>
+                                                    <option value="has">Cu</option>
+                                                </select>
+                                            </th>
+                                            <th>
+                                                <select
+                                                    value={tableFilters.tip}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, tip: e.target.value as TableFilters['tip'] }))}
+                                                    style={{ width: '100%' }}
+                                                >
+                                                    <option value="all">Toate</option>
+                                                    <option value="pf">PF</option>
+                                                    <option value="pj">PJ</option>
+                                                </select>
+                                            </th>
+                                            <th>
+                                                <input
+                                                    value={tableFilters.tertNume}
+                                                    onChange={(e) => setTableFilters((prev) => ({ ...prev, tertNume: e.target.value }))}
+                                                    placeholder="TERT"
+                                                />
+                                            </th>
+                                        </>
+                                    )}
+
+                                    <th style={{ whiteSpace: 'nowrap' }}>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => setTableFilters({
+                                                status: 'all',
+                                                denumire: '',
+                                                cuiCnp: '',
+                                                email: '',
+                                                username: '',
+                                                subconturi: 'all',
+                                                tip: 'all',
+                                                tertNume: '',
+                                                modificare: '',
+                                                judet: '',
+                                                localitate: '',
+                                            })}
+                                        >
+                                            Reset
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <input
+                                            value={tableFilters.modificare}
+                                            onChange={(e) => setTableFilters((prev) => ({ ...prev, modificare: e.target.value }))}
+                                            placeholder="User/data"
+                                        />
+                                    </th>
+                                </tr>
                             </thead>
                             <tbody>
-                                {filteredUsers.map((user) => (
+                                {tableVisibleUsers.map((user) => (
                                     <tr key={user.ID}>
                                         <td>
                                             {user.ACTIV ? (
