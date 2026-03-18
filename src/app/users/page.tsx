@@ -36,6 +36,13 @@ interface User {
 interface EditPayload {
     user: User;
     formData: Record<string, string | number>;
+    expectedModificatLa: string | null;
+}
+
+interface StatusPayload {
+    user: User;
+    newStatus: number;
+    expectedModificatLa: string | null;
 }
 
 export default function UsersPage() {
@@ -52,7 +59,7 @@ export default function UsersPage() {
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
         action: 'status' | 'edit';
-        data: User | EditPayload | null;
+        data: StatusPayload | EditPayload | null;
         diffs: Array<{ field: string; oldValue: string; newValue: string }>;
         title: string;
         requireTyped?: string;
@@ -104,45 +111,83 @@ export default function UsersPage() {
 
     const toggleStatus = async (user: User) => {
         const newStatus = user.ACTIV === 1 ? 0 : 1;
-        setConfirmModal({
-            isOpen: true,
-            action: 'status',
-            data: user,
-            diffs: [{
-                field: 'Status (ACTIV)',
-                oldValue: user.ACTIV === 1 ? '1 (Activ)' : '0 (Inactiv)',
-                newValue: newStatus === 1 ? '1 (Activ)' : '0 (Inactiv)'
-            }],
-            title: `Schimbare status pentru: ${user.NUME} ${user.PRENUME}`,
-            requireTyped: 'CONFIRM' // Solicită tastare explicită pentru schimbări de statut / acces.
-        });
+        try {
+            const dryRunRes = await fetch(`/api/users/${user.ID}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ activ: newStatus, dryRun: true }),
+            });
+            const dryRunData = await dryRunRes.json();
+            if (!dryRunData.success) {
+                showToast('error', dryRunData.error || 'Eroare la prevalidare status');
+                return;
+            }
+
+            const apiDiffs = Array.isArray(dryRunData.data?.changes)
+                ? dryRunData.data.changes as Array<{ field: string; oldValue: string; newValue: string }>
+                : [];
+            const isIdempotent = !!dryRunData.data?.idempotent;
+            const currentVersion = typeof dryRunData.data?.currentVersion === 'string' || dryRunData.data?.currentVersion === null
+                ? dryRunData.data.currentVersion as string | null
+                : (user.MODIFICAT_LA ?? null);
+
+            if (isIdempotent || apiDiffs.length === 0) {
+                showToast('success', 'Idempotent: statusul era deja setat. Nu se face scriere în DB.');
+                return;
+            }
+
+            setConfirmModal({
+                isOpen: true,
+                action: 'status',
+                data: { user, newStatus, expectedModificatLa: currentVersion },
+                diffs: apiDiffs,
+                title: `Schimbare status pentru: ${user.NUME} ${user.PRENUME}`,
+                requireTyped: 'CONFIRM' // Solicită tastare explicită pentru schimbări de statut / acces.
+            });
+        } catch {
+            showToast('error', 'Eroare la prevalidarea statusului');
+        }
     };
 
     const handleSaveEdit = async (formData: Record<string, string | number>) => {
         if (!editUser) return;
-
-        // Construim Diff-urile iterând pe cheile din formData
-        const diffs: Array<{ field: string; oldValue: string; newValue: string }> = [];
-        for (const key of Object.keys(formData)) {
-            const oldVal = String((editUser as unknown as Record<string, unknown>)[key] ?? '');
-            const newVal = String(formData[key] ?? '');
-            if (String(oldVal) !== String(newVal)) {
-                diffs.push({
-                    field: key,
-                    oldValue: oldVal,
-                    newValue: newVal
-                });
+        try {
+            // Dry-run obligatoriu: validare server-side + diffs reale + versiune concurență.
+            const dryRunRes = await fetch(`/api/users/${editUser.ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...formData, dryRun: true }),
+            });
+            const dryRunData = await dryRunRes.json();
+            if (!dryRunData.success) {
+                showToast('error', dryRunData.error || 'Eroare la prevalidare (dry-run)');
+                return;
             }
-        }
 
-        setConfirmModal({
-            isOpen: true,
-            action: 'edit',
-            data: { user: editUser, formData },
-            diffs,
-            title: `Actualizare date pentru: ${editUser.NUME} ${editUser.PRENUME}`,
-            requireTyped: diffs.some((d) => d.field === 'PAROLA' || d.field === 'ACTIV') ? 'CONFIRM' : undefined
-        });
+            const apiDiffs = Array.isArray(dryRunData.data?.changes)
+                ? dryRunData.data.changes as Array<{ field: string; oldValue: string; newValue: string }>
+                : [];
+            const isIdempotent = !!dryRunData.data?.idempotent;
+            const currentVersion = typeof dryRunData.data?.currentVersion === 'string' || dryRunData.data?.currentVersion === null
+                ? dryRunData.data.currentVersion as string | null
+                : (editUser.MODIFICAT_LA ?? null);
+
+            if (isIdempotent || apiDiffs.length === 0) {
+                showToast('success', 'Idempotent: nicio modificare reală detectată. Nu se face scriere în DB.');
+                return;
+            }
+
+            setConfirmModal({
+                isOpen: true,
+                action: 'edit',
+                data: { user: editUser, formData, expectedModificatLa: currentVersion },
+                diffs: apiDiffs,
+                title: `Actualizare date pentru: ${editUser.NUME} ${editUser.PRENUME}`,
+                requireTyped: apiDiffs.some((d) => d.field === 'PAROLA' || d.field === 'ACTIV') ? 'CONFIRM' : undefined
+            });
+        } catch {
+            showToast('error', 'Eroare la prevalidarea modificărilor');
+        }
     };
 
     // Funcția care execută efectiv scrierea după confirmare
@@ -151,15 +196,21 @@ export default function UsersPage() {
         if (!data) return;
 
         if (action === 'status') {
-            const user = data as User;
-            const newStatus = user.ACTIV === 1 ? 0 : 1;
+            const { user, newStatus, expectedModificatLa } = data as StatusPayload;
             try {
                 const res = await fetch(`/api/users/${user.ID}/status`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ activ: newStatus }),
+                    body: JSON.stringify({ activ: newStatus, expectedModificatLa }),
                 });
                 const resData = await res.json();
+                if (res.status === 409) {
+                    showToast('error', 'Statusul a fost modificat între timp de alt operator. Reîncarcă și reîncearcă.');
+                    if (searchValue.trim()) {
+                        handleSearch();
+                    }
+                    return;
+                }
                 if (resData.success) {
                     setUsers(users.map(u => u.ID === user.ID ? { ...u, ACTIV: newStatus } : u));
                     showToast('success', resData.data.idempotent
@@ -173,14 +224,22 @@ export default function UsersPage() {
                 showToast('error', 'Eroare la actualizarea statusului');
             }
         } else if (action === 'edit') {
-            const { user, formData } = data as EditPayload;
+            const { user, formData, expectedModificatLa } = data as EditPayload;
             try {
                 const res = await fetch(`/api/users/${user.ID}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(formData),
+                    body: JSON.stringify({ ...formData, expectedModificatLa }),
                 });
                 const resData = await res.json();
+                if (res.status === 409) {
+                    showToast('error', 'Datele au fost modificate între timp de alt operator. Reîncarcă utilizatorul și reîncearcă.');
+                    setEditUser(null);
+                    if (searchValue.trim()) {
+                        handleSearch();
+                    }
+                    return;
+                }
                 if (resData.success) {
                     showToast('success', resData.data.idempotent
                         ? `Idempotent: Nicio modificare reală detectată față de DB. Nu s-a executat scrierea.`
@@ -471,11 +530,12 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
         NUME: user.NUME || '',
         PRENUME: user.PRENUME || '',
         EMAIL: user.EMAIL || '',
-        PAROLA: user.PAROLA || '',
         ACTIV: user.ACTIV ?? 0,
         ticket_emails: user.ticket_emails || '',
         adrese_mail_alternative: user.adrese_mail_alternative || '',
     });
+    const [changePassword, setChangePassword] = useState(false);
+    const [newPasswordValue, setNewPasswordValue] = useState('');
     const [subaccounts, setSubaccounts] = useState<Subaccount[]>([]);
     const [loadingSubs, setLoadingSubs] = useState(false);
     const [subError, setSubError] = useState<string | null>(null);
@@ -506,6 +566,15 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
             ...formData,
             [name]: name === 'ACTIV' ? Number(value) : value
         });
+    };
+
+    const handleSave = () => {
+        const payload: Record<string, string | number> = { ...formData };
+        const nextPassword = newPasswordValue.trim();
+        if (changePassword && nextPassword.length > 0) {
+            payload.PAROLA = nextPassword;
+        }
+        onSave(payload);
     };
 
     return (
@@ -544,13 +613,33 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                     </div>
 
                     <div className="form-group">
-                        <label>Parolă (valoare criptată)</label>
-                        <input
-                            name="PAROLA"
-                            value={formData.PAROLA}
-                            onChange={handleChange}
-                            placeholder="Valoare criptată din DB"
-                        />
+                        <label>Parolă</label>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                            <div><strong>Parolă setată:</strong> {user.PASS_SET_DATE ? 'Da' : 'Necunoscut / Nesetat'}</div>
+                            <div><strong>Ultima schimbare:</strong> {user.PASS_SET_DATE ? new Date(user.PASS_SET_DATE).toLocaleString('ro-RO') : '—'}</div>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={changePassword}
+                                onChange={(e) => {
+                                    const enabled = e.target.checked;
+                                    setChangePassword(enabled);
+                                    if (!enabled) setNewPasswordValue('');
+                                }}
+                            />
+                            Schimbă parola
+                        </label>
+                        {changePassword && (
+                            <input
+                                name="PAROLA_NEW"
+                                type="text"
+                                value={newPasswordValue}
+                                onChange={(e) => setNewPasswordValue(e.target.value)}
+                                placeholder="Introdu valoarea parolei pentru update"
+                                style={{ marginTop: '8px' }}
+                            />
+                        )}
                     </div>
 
                     <div className="form-group">
@@ -645,7 +734,7 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
 
                 <div className="modal-footer">
                     <button className="btn btn-ghost" onClick={onClose}>Anulează</button>
-                    <button className="btn btn-primary" onClick={() => onSave(formData)}>
+                    <button className="btn btn-primary" onClick={handleSave}>
                         💾 Salvează
                     </button>
                 </div>
