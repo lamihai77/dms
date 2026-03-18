@@ -97,6 +97,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     // Allowed fields to update
     const normalized: UserUpdateData = {};
     const hasOwn = (k: keyof UserUpdateData) => Object.prototype.hasOwnProperty.call(body, k);
+    const hasNormalizedOwn = (k: keyof UserUpdateData) => Object.prototype.hasOwnProperty.call(normalized, k);
     type StringField = 'NUME' | 'PRENUME' | 'EMAIL' | 'PAROLA' | 'ticket_emails' | 'adrese_mail_alternative';
 
     const normalizeString = (key: StringField, maxLen: number, options?: { required?: boolean; email?: boolean }) => {
@@ -135,7 +136,20 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         normalizeString('NUME', 100, { required: true });
         normalizeString('PRENUME', 100, { required: true });
         normalizeString('EMAIL', 254, { email: true });
-        normalizeString('PAROLA', 512, { required: true });
+        if (hasOwn('PAROLA')) {
+            const rawPassword = body.PAROLA;
+            if (typeof rawPassword !== 'string') {
+                throw new Error('Câmpul PAROLA trebuie să fie text');
+            }
+            const passwordValue = rawPassword.trim();
+            // Parola este opțională la update: dacă e goală, ignorăm câmpul.
+            if (passwordValue.length > 0) {
+                if (passwordValue.length > 512) {
+                    throw new Error('Câmpul PAROLA depășește 512 caractere');
+                }
+                normalized.PAROLA = passwordValue;
+            }
+        }
         normalizeString('ticket_emails', 2000);
         normalizeString('adrese_mail_alternative', 4000);
         normalizeBit('ACTIV');
@@ -207,6 +221,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
         for (const field of allowedFields) {
             if (!hasOwn(field)) continue;
+            if (field === 'PAROLA' && !hasNormalizedOwn('PAROLA')) continue;
             const newValue = normalized[field];
             const currentValue = currentUser[field];
             const same = String(currentValue ?? '') === String(newValue ?? '');
@@ -257,7 +272,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         // 2. Executare Scriere Efectivă
         updates.push('MODIFICAT_DE = @modificat_de');
         updates.push('MODIFICAT_LA = @modificat_la');
-        if (hasOwn('PAROLA')) {
+        if (hasNormalizedOwn('PAROLA')) {
             updates.push('PASS_SET_DATE = @modificat_la');
             updates.push('parola_c = @PAROLA');
         }
