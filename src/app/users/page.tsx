@@ -617,7 +617,12 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                         <label>Parolă</label>
                         <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
                             <div><strong>Parolă setată:</strong> {(user.PASSWORD_SET ?? false) || !!user.PASS_SET_DATE ? 'Da' : 'Nu'}</div>
-                            <div><strong>Ultima schimbare:</strong> {user.PASS_SET_DATE ? new Date(user.PASS_SET_DATE).toLocaleString('ro-RO') : '—'}</div>
+                            <div>
+                                <strong>Ultima schimbare:</strong>{' '}
+                                {user.PASS_SET_DATE
+                                    ? new Date(user.PASS_SET_DATE).toLocaleString('ro-RO')
+                                    : ((user.PASSWORD_SET ?? false) ? 'indisponibilă (legacy)' : '—')}
+                            </div>
                         </div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                             <input
