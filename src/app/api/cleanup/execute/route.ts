@@ -39,15 +39,20 @@ export async function POST(req: NextRequest) {
     try {
         const pool = await getDb();
         const transaction = new sql.Transaction(pool);
-        await transaction.begin();
+        await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
 
         try {
-            const request = new sql.Request(transaction);
+            const modBy = getUsername(authUser);
+            const now = new Date();
+            const inParams: string[] = [];
+            removeUnique.forEach((_, index) => {
+                inParams.push(`@rid${index}`);
+            });
 
             // Pre-flight safety checks: keepId must exist; removeIds must all exist.
-            const keepExists = await request
+            const keepExists = await new sql.Request(transaction)
                 .input('keepId', sql.Int, keep)
-                .query(`SELECT TOP 1 ID FROM DMS.TERT WHERE ID = @keepId`);
+                .query(`SELECT TOP 1 ID FROM DMS.TERT WITH (UPDLOCK, HOLDLOCK) WHERE ID = @keepId`);
             if (keepExists.recordset.length === 0) {
                 await transaction.rollback();
                 return NextResponse.json<ApiResponse<null>>({
@@ -57,14 +62,12 @@ export async function POST(req: NextRequest) {
             }
 
             const existsReq = new sql.Request(transaction);
-            const existsInParams: string[] = [];
             removeUnique.forEach((id, index) => {
                 const k = `rid${index}`;
-                existsInParams.push(`@${k}`);
                 existsReq.input(k, sql.Int, id);
             });
             const removeExists = await existsReq.query(`
-              SELECT ID FROM DMS.TERT WHERE ID IN (${existsInParams.join(',')})
+              SELECT ID FROM DMS.TERT WITH (UPDLOCK, HOLDLOCK) WHERE ID IN (${inParams.join(',')})
             `);
             if (removeExists.recordset.length !== removeUnique.length) {
                 await transaction.rollback();
@@ -74,35 +77,29 @@ export async function POST(req: NextRequest) {
                 }, { status: 400 });
             }
 
-            // Step 1: Reassign users from removeIds to keepId
-            let reassignedUsers = 0;
-            for (const removeId of removeUnique) {
-                const updateUsersResult = await request
-                    .input(`keepId_${removeId}`, sql.Int, keep)
-                    .input(`removeId_${removeId}`, sql.Int, removeId)
-                    .input(`mod_de_${removeId}`, sql.VarChar, getUsername(authUser))
-                    .input(`mod_la_${removeId}`, sql.DateTime2, new Date())
-                    .query(`
-            UPDATE DMS.UTILIZATORI 
-            SET ID_TERT = @keepId_${removeId},
-                MODIFICAT_DE = @mod_de_${removeId},
-                MODIFICAT_LA = @mod_la_${removeId}
-            WHERE ID_TERT = @removeId_${removeId}
+            // Step 1: Reassign users from removeIds to keepId (set-based).
+            const usersReq = new sql.Request(transaction)
+                .input('keepId', sql.Int, keep)
+                .input('mod_de', sql.VarChar, modBy)
+                .input('mod_la', sql.DateTime2, now);
+            removeUnique.forEach((id, index) => usersReq.input(`rid${index}`, sql.Int, id));
+            const updateUsersResult = await usersReq.query(`
+            UPDATE DMS.UTILIZATORI
+            SET ID_TERT = @keepId,
+                MODIFICAT_DE = @mod_de,
+                MODIFICAT_LA = @mod_la
+            WHERE ID_TERT IN (${inParams.join(',')})
           `);
-                reassignedUsers += updateUsersResult.rowsAffected?.[0] || 0;
-            }
+            const reassignedUsers = updateUsersResult.rowsAffected?.[0] || 0;
 
-            // Step 2: Delete redundant TERT records
+            // Step 2: Mark redundant TERT records
             // NOTE: Only delete if no other FK references exist
             // For safety, we just mark them as BLOCAT instead of deleting
-            let blockedTerts = 0;
-            for (const removeId of removeUnique) {
-                const reqBlock = new sql.Request(transaction);
-                const blockResult = await reqBlock
-                    .input('removeId', sql.Int, removeId)
-                    .input('mod_de', sql.VarChar, getUsername(authUser))
-                    .input('mod_la', sql.DateTime2, new Date())
-                    .query(`
+            const blockReq = new sql.Request(transaction)
+                .input('mod_de', sql.VarChar, modBy)
+                .input('mod_la', sql.DateTime2, now);
+            removeUnique.forEach((id, index) => blockReq.input(`rid${index}`, sql.Int, id));
+            const blockResult = await blockReq.query(`
             UPDATE DMS.TERT 
             SET BLOCAT = 1,
                 MODIFICAT_DE = @mod_de,
@@ -111,14 +108,13 @@ export async function POST(req: NextRequest) {
                     WHEN ISNULL(INFO, '') LIKE '%[DUPLICATE - BLOCAT automat, keepId referință]%' THEN INFO
                     ELSE ISNULL(INFO, '') + ' [DUPLICATE - BLOCAT automat, keepId referință]'
                 END
-            WHERE ID = @removeId
+            WHERE ID IN (${inParams.join(',')})
               AND (
                 ISNULL(BLOCAT, 0) <> 1
                 OR ISNULL(INFO, '') NOT LIKE '%[DUPLICATE - BLOCAT automat, keepId referință]%'
               )
           `);
-                blockedTerts += blockResult.rowsAffected?.[0] || 0;
-            }
+            const blockedTerts = blockResult.rowsAffected?.[0] || 0;
 
             await transaction.commit();
 
