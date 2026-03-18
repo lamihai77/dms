@@ -18,6 +18,20 @@ export async function POST(req: NextRequest) {
 
     const authUser = getAuthUser(req) || 'system';
     const body = await req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'Payload invalid',
+        }, { status: 400 });
+    }
+    const allowedBodyKeys = new Set(['keepId', 'removeIds']);
+    const unknownKeys = Object.keys(body as Record<string, unknown>).filter((k) => !allowedBodyKeys.has(k));
+    if (unknownKeys.length > 0) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: `Câmpuri nepermise în payload: ${unknownKeys.join(', ')}`,
+        }, { status: 400 });
+    }
     const { keepId, removeIds } = body as { keepId: number; removeIds: number[] };
     const keep = Number(keepId);
     const removeUnique = Array.from(new Set((removeIds || []).map((id) => Number(id))))

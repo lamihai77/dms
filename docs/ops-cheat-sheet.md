@@ -20,6 +20,14 @@ Health checks
 - Local: Invoke-WebRequest http://127.0.0.1:3000/api/health -UseBasicParsing
 - LAN:   curl -I http://192.168.70.23:3000/api/health
 
+DB consistency checks (pre-prod)
+- Run in repo:
+  npm run db:check
+- Strict mode (warnings fail):
+  $env:DB_CHECK_STRICT="true"; npm run db:check
+- Relaxed mode (warnings only log):
+  $env:DB_CHECK_STRICT="false"; npm run db:check
+
 Logs (on server)
 - Runtime: d:\Proiecte\dms\logs\server.log
 - Startup: d:\Proiecte\dms\logs\startup.log

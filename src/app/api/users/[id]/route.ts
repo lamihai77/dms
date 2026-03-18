@@ -101,6 +101,23 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         expectedModificatLa?: unknown;
     };
     const dryRun = body.dryRun === true;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: 'Payload invalid',
+        }, { status: 400 });
+    }
+    const allowedBodyKeys = new Set<keyof UserUpdateData | 'dryRun' | 'expectedModificatLa'>([
+        'NUME', 'PRENUME', 'EMAIL', 'PAROLA', 'ACTIV', 'LOCKED', 'ticket_emails', 'adrese_mail_alternative',
+        'dryRun', 'expectedModificatLa',
+    ]);
+    const unknownKeys = Object.keys(body).filter((k) => !allowedBodyKeys.has(k as keyof UserUpdateData | 'dryRun' | 'expectedModificatLa'));
+    if (unknownKeys.length > 0) {
+        return NextResponse.json<ApiResponse<null>>({
+            success: false,
+            error: `Câmpuri nepermise în payload: ${unknownKeys.join(', ')}`,
+        }, { status: 400 });
+    }
 
     if (isNaN(userId)) {
         return NextResponse.json<ApiResponse<null>>({

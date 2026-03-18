@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev -H 192.168.70.23 -p 3000",
     "build": "next build",
-    "start": "next start -H 192.168.70.23 -p 3000",
-    "lint": "eslint"
+    "start": "start-server.bat",
+    "lint": "eslint",
+    "db:check": "node scripts/db-integrity-check.js"
   },
   "dependencies": {
     "mssql": "^12.2.0",
