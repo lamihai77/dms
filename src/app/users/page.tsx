@@ -60,6 +60,43 @@ interface TableFilters {
     localitate: string;
 }
 
+const TABLE_FILTERS_STORAGE_KEY = 'dms_users_table_filters_v1';
+const DEFAULT_TABLE_FILTERS: TableFilters = {
+    status: 'all',
+    denumire: '',
+    cuiCnp: '',
+    email: '',
+    username: '',
+    subconturi: 'all',
+    tip: 'all',
+    tertNume: '',
+    modificare: '',
+    judet: '',
+    localitate: '',
+};
+
+function normalizeStoredFilters(raw: Partial<TableFilters> | null | undefined): TableFilters {
+    const next: TableFilters = { ...DEFAULT_TABLE_FILTERS };
+    if (!raw || typeof raw !== 'object') return next;
+
+    const asString = (value: unknown) => typeof value === 'string' ? value : '';
+    const isIn = <T extends string>(value: unknown, values: readonly T[], fallback: T): T =>
+        typeof value === 'string' && (values as readonly string[]).includes(value) ? value as T : fallback;
+
+    next.status = isIn(raw.status, ['all', 'active', 'inactive'] as const, 'all');
+    next.denumire = asString(raw.denumire);
+    next.cuiCnp = asString(raw.cuiCnp);
+    next.email = asString(raw.email);
+    next.username = asString(raw.username);
+    next.subconturi = isIn(raw.subconturi, ['all', 'none', 'has'] as const, 'all');
+    next.tip = isIn(raw.tip, ['all', 'pf', 'pj'] as const, 'all');
+    next.tertNume = asString(raw.tertNume);
+    next.modificare = asString(raw.modificare);
+    next.judet = asString(raw.judet);
+    next.localitate = asString(raw.localitate);
+    return next;
+}
+
 export default function UsersPage() {
     const [searchValue, setSearchValue] = useState('');
     const [users, setUsers] = useState<User[]>([]);
@@ -69,19 +106,7 @@ export default function UsersPage() {
     const [toast, setToast] = useState<{ type: string; message: string } | null>(null);
     const [filterCategory, setFilterCategory] = useState<'all' | 'ad' | 'pf' | 'pj'>('all');
     const [dataSource, setDataSource] = useState<string | null>(null);
-    const [tableFilters, setTableFilters] = useState<TableFilters>({
-        status: 'all',
-        denumire: '',
-        cuiCnp: '',
-        email: '',
-        username: '',
-        subconturi: 'all',
-        tip: 'all',
-        tertNume: '',
-        modificare: '',
-        judet: '',
-        localitate: '',
-    });
+    const [tableFilters, setTableFilters] = useState<TableFilters>({ ...DEFAULT_TABLE_FILTERS });
 
     // Stare pentru modalul de confirmare scriere cu 2 pași
     const [confirmModal, setConfirmModal] = useState<{
@@ -97,6 +122,34 @@ export default function UsersPage() {
         setToast({ type, message });
         setTimeout(() => setToast(null), 3000);
     };
+
+    const clearTableFilters = () => {
+        setTableFilters({ ...DEFAULT_TABLE_FILTERS });
+        try {
+            localStorage.removeItem(TABLE_FILTERS_STORAGE_KEY);
+        } catch {
+            // ignore storage errors in restricted environments
+        }
+    };
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem(TABLE_FILTERS_STORAGE_KEY);
+            if (!stored) return;
+            const parsed = JSON.parse(stored) as Partial<TableFilters>;
+            setTableFilters(normalizeStoredFilters(parsed));
+        } catch {
+            // ignore invalid JSON or storage access issues
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(TABLE_FILTERS_STORAGE_KEY, JSON.stringify(tableFilters));
+        } catch {
+            // ignore storage errors in restricted environments
+        }
+    }, [tableFilters]);
 
     const handleSearch = async () => {
         const trimmedValue = searchValue.trim();
@@ -168,6 +221,19 @@ export default function UsersPage() {
 
         return true;
     });
+
+    const hasActiveTableFilters =
+        tableFilters.status !== DEFAULT_TABLE_FILTERS.status
+        || tableFilters.denumire.trim() !== ''
+        || tableFilters.cuiCnp.trim() !== ''
+        || tableFilters.email.trim() !== ''
+        || tableFilters.username.trim() !== ''
+        || tableFilters.subconturi !== DEFAULT_TABLE_FILTERS.subconturi
+        || tableFilters.tip !== DEFAULT_TABLE_FILTERS.tip
+        || tableFilters.tertNume.trim() !== ''
+        || tableFilters.modificare.trim() !== ''
+        || tableFilters.judet.trim() !== ''
+        || tableFilters.localitate.trim() !== '';
 
     const toggleStatus = async (user: User) => {
         const newStatus = user.ACTIV === 1 ? 0 : 1;
@@ -403,7 +469,33 @@ export default function UsersPage() {
                 >
                     Persoane Juridice ({users.filter(u => !!u.TERT_CUI).length})
                 </button>
+                <button
+                    className="btn btn-ghost"
+                    onClick={clearTableFilters}
+                    title="Șterge toate filtrele din tabel (inclusiv cele salvate)"
+                >
+                    🧹 Șterge filtre
+                </button>
             </div>
+
+            {hasActiveTableFilters && (
+                <div
+                    className="card"
+                    style={{
+                        marginBottom: '14px',
+                        borderColor: '#f59e0b',
+                        background: '#fffbeb',
+                        color: '#92400e',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '10px',
+                    }}
+                >
+                    <span>⚠️ Atenție: sunt filtre active în tabelul de rezultate.</span>
+                    <button className="btn btn-ghost btn-sm" onClick={clearTableFilters}>Șterge filtre</button>
+                </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -572,19 +664,7 @@ export default function UsersPage() {
                                     <th style={{ whiteSpace: 'nowrap' }}>
                                         <button
                                             className="btn btn-ghost btn-sm"
-                                            onClick={() => setTableFilters({
-                                                status: 'all',
-                                                denumire: '',
-                                                cuiCnp: '',
-                                                email: '',
-                                                username: '',
-                                                subconturi: 'all',
-                                                tip: 'all',
-                                                tertNume: '',
-                                                modificare: '',
-                                                judet: '',
-                                                localitate: '',
-                                            })}
+                                            onClick={clearTableFilters}
                                         >
                                             Reset
                                         </button>
