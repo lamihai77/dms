@@ -13,6 +13,19 @@ if (!Number.isFinite(dbPort) || dbPort <= 0 || dbPort > 65535) {
     throw new Error('[DB] Invalid DB_PORT. Expected integer in range 1..65535');
 }
 
+function parseBooleanEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name];
+    if (!raw || raw.trim() === '') return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    throw new Error(`[DB] Invalid ${name}. Expected true/false`);
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+const dbEncrypt = parseBooleanEnv('DB_ENCRYPT', isProduction);
+const dbTrustCert = parseBooleanEnv('DB_TRUST_CERT', !isProduction);
+
 const config: sql.config = {
     server: requireEnv('DB_SERVER', 'localhost'),
     port: dbPort,
@@ -20,8 +33,8 @@ const config: sql.config = {
     user: requireEnv('DB_USER'),
     password: requireEnv('DB_PASSWORD'),
     options: {
-        encrypt: false,
-        trustServerCertificate: true,
+        encrypt: dbEncrypt,
+        trustServerCertificate: dbTrustCert,
         enableArithAbort: true,
     },
     pool: {

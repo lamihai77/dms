@@ -9,19 +9,6 @@ interface RouteParams {
 
 type SanitizedUtilizator = Omit<Utilizator, 'CHEIE_SECURITATE' | 'parola_c'>;
 
-function pickEncryptedPassword(row: Record<string, unknown>): string {
-    const candidates = ['PAROLA', 'parola_c', 'PAROLA_C', 'CHEIE_SECURITATE'] as const;
-    for (const key of candidates) {
-        const value = row[key];
-        if (typeof value !== 'string') continue;
-        const normalized = value.trim();
-        if (!normalized) continue;
-        if (normalized.toLowerCase() === 'null') continue;
-        return normalized;
-    }
-    return '';
-}
-
 /**
  * GET /api/users/[id] — Get a single user with full details
  */
@@ -65,9 +52,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         }
 
         const safeUser = { ...result.recordset[0] } as Record<string, unknown>;
-        // Compatibilitate extinsă: PAROLA (curent), parola_c/PAROLA_C (legacy), CHEIE_SECURITATE (instanțe vechi)
-        safeUser.PAROLA = pickEncryptedPassword(safeUser);
+        // Nu expunem parola (nici hash/encrypted) catre client.
+        safeUser.PAROLA = '';
         delete safeUser.parola_c;
+        delete safeUser.PAROLA_C;
         delete safeUser.CHEIE_SECURITATE;
 
         return NextResponse.json<ApiResponse<SanitizedUtilizator>>({
@@ -93,7 +81,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const userId = parseInt(id);
     const authUser = getAuthUser(req) || 'system';
-    const body = await req.json() as Partial<Record<keyof UserUpdateData, unknown>>;
+    const body = await req.json() as Partial<Record<keyof UserUpdateData, unknown>> & {
+        dryRun?: unknown;
+        expectedModificatLa?: unknown;
+    };
+    const dryRun = body.dryRun === true;
 
     if (isNaN(userId)) {
         return NextResponse.json<ApiResponse<null>>({
@@ -155,6 +147,26 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         }, { status: 400 });
     }
 
+    let expectedModificatLa: Date | null = null;
+    if (!dryRun) {
+        if (!(typeof body.expectedModificatLa === 'string' || body.expectedModificatLa === null)) {
+            return NextResponse.json<ApiResponse<null>>({
+                success: false,
+                error: 'Lipsește precondiția de concurență (expectedModificatLa). Rulează întâi dry-run.',
+            }, { status: 428 });
+        }
+        if (typeof body.expectedModificatLa === 'string') {
+            const parsed = new Date(body.expectedModificatLa);
+            if (Number.isNaN(parsed.getTime())) {
+                return NextResponse.json<ApiResponse<null>>({
+                    success: false,
+                    error: 'expectedModificatLa invalid',
+                }, { status: 400 });
+            }
+            expectedModificatLa = parsed;
+        }
+    }
+
     try {
         const pool = await getDb();
 
@@ -174,6 +186,15 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         const updates: string[] = [];
         const request = pool.request();
         let hasRealChanges = false;
+        const diffs: Array<{ field: string; oldValue: string; newValue: string }> = [];
+
+        const currentModRaw = currentUser.MODIFICAT_LA;
+        const currentModDate = currentModRaw instanceof Date
+            ? currentModRaw
+            : (currentModRaw ? new Date(String(currentModRaw)) : null);
+        const currentModIso = currentModDate && !Number.isNaN(currentModDate.getTime())
+            ? currentModDate.toISOString()
+            : null;
 
         request.input('id', sql.Int, userId);
         request.input('modificat_de', sql.VarChar, getUsername(authUser));
@@ -192,6 +213,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
             if (same) continue;
 
             hasRealChanges = true;
+            diffs.push({
+                field,
+                oldValue: String(currentValue ?? ''),
+                newValue: String(newValue ?? ''),
+            });
             updates.push(`${field} = @${field}`);
             if (typeof newValue === 'number') {
                 request.input(field, sql.Int, newValue);
@@ -203,9 +229,28 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         if (updates.length === 0 || !hasRealChanges) {
             // Idempotent: Nu e nevoie de niciun UPDATE în DB
             console.log(`[IDEMPOTENT] No changes detected for User ${userId}. Skipping write.`);
-            return NextResponse.json<ApiResponse<{ updated: true, idempotent: boolean }>>({
+            return NextResponse.json<ApiResponse<{ updated: true, idempotent: boolean; dryRun?: boolean; changes?: Array<{ field: string; oldValue: string; newValue: string }>; currentVersion?: string | null }>>({
                 success: true,
-                data: { updated: true, idempotent: true },
+                data: {
+                    updated: true,
+                    idempotent: true,
+                    dryRun,
+                    changes: [],
+                    currentVersion: currentModIso,
+                },
+            });
+        }
+
+        if (dryRun) {
+            return NextResponse.json<ApiResponse<{ updated: false; idempotent: boolean; dryRun: boolean; changes: Array<{ field: string; oldValue: string; newValue: string }>; currentVersion: string | null }>>({
+                success: true,
+                data: {
+                    updated: false,
+                    idempotent: false,
+                    dryRun: true,
+                    changes: diffs,
+                    currentVersion: currentModIso,
+                },
             });
         }
 
@@ -216,12 +261,24 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
             updates.push('PASS_SET_DATE = @modificat_la');
             updates.push('parola_c = @PAROLA');
         }
+        request.input('expected_modificat_la', sql.DateTime2, expectedModificatLa);
 
-        await request.query(`
+        const writeResult = await request.query(`
       UPDATE DMS.UTILIZATORI 
       SET ${updates.join(', ')}
       WHERE ID = @id
+        AND (
+          (MODIFICAT_LA IS NULL AND @expected_modificat_la IS NULL)
+          OR MODIFICAT_LA = @expected_modificat_la
+        )
     `);
+        const rowsAffected = writeResult.rowsAffected?.[0] || 0;
+        if (rowsAffected === 0) {
+            return NextResponse.json<ApiResponse<null>>({
+                success: false,
+                error: 'Înregistrarea a fost modificată între timp de alt operator. Reîncarcă datele și reîncearcă.',
+            }, { status: 409 });
+        }
 
         return NextResponse.json<ApiResponse<{ updated: true, idempotent: boolean }>>({
             success: true,

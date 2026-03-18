@@ -111,7 +111,10 @@ export function isAllowedAdmin(fullOrShortUser: string): boolean {
 function getCookieSecret(): string {
     const secret = (process.env.COOKIE_SECRET || '').trim();
     if (secret) return secret;
-    console.warn('[AUTH] COOKIE_SECRET lipsa - folosesc un secret de fallback (doar dev)');
+    if (process.env.NODE_ENV === 'production') {
+        throw new Error('[AUTH] COOKIE_SECRET lipsa in productie');
+    }
+    console.warn('[AUTH] COOKIE_SECRET lipsa - folosesc un secret de fallback (doar non-prod)');
     return 'dev-cookie-secret-change-in-prod';
 }
 
