@@ -20,6 +20,7 @@ interface User {
     MODIFICAT_DE: string | null;
     MODIFICAT_LA: string | null;
     PASS_SET_DATE: string | null;
+    PASSWORD_SET?: boolean;
     USERNAME_LDAP: string | null;
     READ_ONLY: number | null;
     ID_TERT: number | null;
@@ -615,7 +616,7 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                     <div className="form-group">
                         <label>Parolă</label>
                         <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                            <div><strong>Parolă setată:</strong> {user.PASS_SET_DATE ? 'Da' : 'Necunoscut / Nesetat'}</div>
+                            <div><strong>Parolă setată:</strong> {(user.PASSWORD_SET ?? false) || !!user.PASS_SET_DATE ? 'Da' : 'Nu'}</div>
                             <div><strong>Ultima schimbare:</strong> {user.PASS_SET_DATE ? new Date(user.PASS_SET_DATE).toLocaleString('ro-RO') : '—'}</div>
                         </div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>

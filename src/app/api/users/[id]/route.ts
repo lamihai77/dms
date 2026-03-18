@@ -9,6 +9,19 @@ interface RouteParams {
 
 type SanitizedUtilizator = Omit<Utilizator, 'CHEIE_SECURITATE' | 'parola_c'>;
 
+function hasStoredPassword(row: Record<string, unknown>): boolean {
+    const candidates = ['PAROLA', 'parola_c', 'PAROLA_C', 'CHEIE_SECURITATE'] as const;
+    for (const key of candidates) {
+        const value = row[key];
+        if (typeof value !== 'string') continue;
+        const normalized = value.trim();
+        if (!normalized) continue;
+        if (normalized.toLowerCase() === 'null') continue;
+        return true;
+    }
+    return false;
+}
+
 /**
  * GET /api/users/[id] — Get a single user with full details
  */
@@ -51,7 +64,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
             }, { status: 404 });
         }
 
-        const safeUser = { ...result.recordset[0] } as Record<string, unknown>;
+        const sourceUser = result.recordset[0] as Record<string, unknown>;
+        const safeUser = { ...sourceUser } as Record<string, unknown>;
+        safeUser.PASSWORD_SET = hasStoredPassword(sourceUser);
         // Nu expunem parola (nici hash/encrypted) catre client.
         safeUser.PAROLA = '';
         delete safeUser.parola_c;
