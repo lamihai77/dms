@@ -15,6 +15,11 @@ export async function GET(req: NextRequest) {
     const cui = searchParams.get('cui')?.trim();
     const denumire = searchParams.get('denumire')?.trim();
     const userId = searchParams.get('userId');
+    const limitRaw = searchParams.get('limit');
+    const parsedLimit = Number(limitRaw ?? 50);
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0
+        ? Math.min(parsedLimit, 200)
+        : 50;
 
     if (cui && cui.length > 64) {
         return NextResponse.json<ApiResponse<null>>({
@@ -32,15 +37,18 @@ export async function GET(req: NextRequest) {
     try {
         const pool = await getDb();
         const request = pool.request();
+        request.input('top', sql.Int, limit);
         const conditions: string[] = [];
 
         if (cui) {
-            conditions.push('T.COD_CUI LIKE @cui');
-            request.input('cui', sql.VarChar, `%${cui}%`);
+            // Prefer exact/prefix matching for better index usage on COD_CUI.
+            conditions.push('(T.COD_CUI = @cuiExact OR T.COD_CUI LIKE @cuiPrefix)');
+            request.input('cuiExact', sql.VarChar, cui);
+            request.input('cuiPrefix', sql.VarChar, `${cui}%`);
         }
         if (denumire) {
-            conditions.push('T.NUME LIKE @denumire');
-            request.input('denumire', sql.NVarChar, `%${denumire}%`);
+            conditions.push('T.NUME LIKE @denumirePrefix');
+            request.input('denumirePrefix', sql.NVarChar, `${denumire}%`);
         }
         if (userId) {
             const parsedUserId = Number(userId);
@@ -65,7 +73,7 @@ export async function GET(req: NextRequest) {
         const whereClause = conditions.join(' AND ');
 
         const result = await request.query(`
-      SELECT TOP 50
+      SELECT TOP (@top)
         T.ID,
         T.NUME,
         T.COD_CUI,
