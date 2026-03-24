@@ -798,12 +798,9 @@ interface Subaccount {
 
 function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => void, onSave: (data: Record<string, string | number>) => void }) {
     const [formData, setFormData] = useState({
-        NUME: user.NUME || '',
-        PRENUME: user.PRENUME || '',
+        USERNAME: user.USERNAME || '',
         EMAIL: user.EMAIL || '',
         ACTIV: user.ACTIV ?? 0,
-        ticket_emails: user.ticket_emails || '',
-        adrese_mail_alternative: user.adrese_mail_alternative || '',
     });
     const [changePassword, setChangePassword] = useState(false);
     const [newPasswordValue, setNewPasswordValue] = useState('');
@@ -867,15 +864,9 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                         </div>
                     </div>
 
-                    <div className="form-row">
-                        <div className="form-group">
-                            <label>Nume</label>
-                            <input name="NUME" value={formData.NUME} onChange={handleChange} />
-                        </div>
-                        <div className="form-group">
-                            <label>Prenume</label>
-                            <input name="PRENUME" value={formData.PRENUME} onChange={handleChange} />
-                        </div>
+                    <div className="form-group">
+                        <label>Username</label>
+                        <input name="USERNAME" value={formData.USERNAME} onChange={handleChange} />
                     </div>
 
                     <div className="form-group">
@@ -924,21 +915,6 @@ function EditUserModal({ user, onClose, onSave }: { user: User, onClose: () => v
                             <option value="1">Activ</option>
                             <option value="0">Inactiv</option>
                         </select>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Emailuri Tichete (separate prin ;)</label>
-                        <input name="ticket_emails" value={formData.ticket_emails} onChange={handleChange} />
-                    </div>
-
-                    <div className="form-group">
-                        <label>Emailuri Alternative</label>
-                        <textarea
-                            name="adrese_mail_alternative"
-                            value={formData.adrese_mail_alternative}
-                            onChange={handleChange}
-                            rows={3}
-                        />
                     </div>
 
                     {/* Subaccounts Section */}

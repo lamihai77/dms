@@ -109,14 +109,10 @@ export interface TertSearchParams {
 }
 
 export interface UserUpdateData {
-    NUME?: string;
-    PRENUME?: string;
     EMAIL?: string;
+    USERNAME?: string;
     PAROLA?: string;
     ACTIV?: number;
-    LOCKED?: number;
-    ticket_emails?: string;
-    adrese_mail_alternative?: string;
 }
 
 export interface AuditLog {

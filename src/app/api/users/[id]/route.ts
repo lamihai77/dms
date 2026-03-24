@@ -108,7 +108,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         }, { status: 400 });
     }
     const allowedBodyKeys = new Set<keyof UserUpdateData | 'dryRun' | 'expectedModificatLa'>([
-        'NUME', 'PRENUME', 'EMAIL', 'PAROLA', 'ACTIV', 'LOCKED', 'ticket_emails', 'adrese_mail_alternative',
+        'EMAIL', 'USERNAME', 'PAROLA', 'ACTIV',
         'dryRun', 'expectedModificatLa',
     ]);
     const unknownKeys = Object.keys(body).filter((k) => !allowedBodyKeys.has(k as keyof UserUpdateData | 'dryRun' | 'expectedModificatLa'));
@@ -130,7 +130,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const normalized: UserUpdateData = {};
     const hasOwn = (k: keyof UserUpdateData) => Object.prototype.hasOwnProperty.call(body, k);
     const hasNormalizedOwn = (k: keyof UserUpdateData) => Object.prototype.hasOwnProperty.call(normalized, k);
-    type StringField = 'NUME' | 'PRENUME' | 'EMAIL' | 'PAROLA' | 'ticket_emails' | 'adrese_mail_alternative';
+    type StringField = 'EMAIL' | 'USERNAME' | 'PAROLA';
 
     const normalizeString = (key: StringField, maxLen: number, options?: { required?: boolean; email?: boolean }) => {
         if (!hasOwn(key)) return;
@@ -154,7 +154,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         (normalized as Record<StringField, string>)[key] = value;
     };
 
-    const normalizeBit = (key: 'ACTIV' | 'LOCKED') => {
+    const normalizeBit = (key: 'ACTIV') => {
         if (!hasOwn(key)) return;
         const raw = body[key];
         const asNumber = typeof raw === 'number' ? raw : Number(raw);
@@ -165,9 +165,14 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     };
 
     try {
-        normalizeString('NUME', 100, { required: true });
-        normalizeString('PRENUME', 100, { required: true });
         normalizeString('EMAIL', 254, { email: true });
+        normalizeString('USERNAME', 150, { required: true });
+        if (hasOwn('USERNAME')) {
+            const usernameValue = String(normalized.USERNAME || '');
+            if (/\s/.test(usernameValue)) {
+                throw new Error('USERNAME nu poate conține spații');
+            }
+        }
         if (hasOwn('PAROLA')) {
             const rawPassword = body.PAROLA;
             if (typeof rawPassword !== 'string') {
@@ -182,10 +187,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
                 normalized.PAROLA = passwordValue;
             }
         }
-        normalizeString('ticket_emails', 2000);
-        normalizeString('adrese_mail_alternative', 4000);
         normalizeBit('ACTIV');
-        normalizeBit('LOCKED');
     } catch (validationError) {
         return NextResponse.json<ApiResponse<null>>({
             success: false,
@@ -247,8 +249,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         request.input('modificat_la', sql.DateTime2, new Date());
 
         const allowedFields: (keyof UserUpdateData)[] = [
-            'NUME', 'PRENUME', 'EMAIL', 'ACTIV', 'LOCKED',
-            'PAROLA', 'ticket_emails', 'adrese_mail_alternative',
+            'EMAIL', 'USERNAME', 'ACTIV', 'PAROLA',
         ];
 
         for (const field of allowedFields) {
