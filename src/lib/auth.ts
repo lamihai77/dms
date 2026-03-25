@@ -2,20 +2,36 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { spawn } from 'child_process';
 import { NextRequest, NextResponse } from 'next/server';
 
+function parseBooleanEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name];
+    if (!raw || raw.trim() === '') return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+}
+
+function canTrustProxyAuthHeaders(): boolean {
+    // Default sigur: nu avem incredere in headerele de identitate
+    // decat daca este activat explicit.
+    return parseBooleanEnv('TRUST_PROXY_AUTH_HEADERS', false);
+}
+
 /**
  * Get the authenticated Windows user from IIS headers.
  * When running behind IIS with Windows Auth, IIS sets these headers.
  * In development, we use a fallback dev user.
  */
 export function getAuthUser(req: NextRequest): string | null {
-    // IIS passes the authenticated user in these headers
-    const user =
-        req.headers.get('x-iis-windowsauthtoken') ||
-        req.headers.get('x-ms-client-principal-name') ||
-        req.headers.get('remote-user') ||
-        req.headers.get('x-forwarded-user');
-
-    if (user) return user;
+    if (canTrustProxyAuthHeaders()) {
+        // IIS/proxy passthrough (explicitly enabled)
+        const user =
+            req.headers.get('x-iis-windowsauthtoken') ||
+            req.headers.get('x-ms-client-principal-name') ||
+            req.headers.get('remote-user') ||
+            req.headers.get('x-forwarded-user');
+        if (user) return user;
+    }
 
     const cookie = req.cookies.get('dms_admin_auth')?.value;
     if (cookie) {

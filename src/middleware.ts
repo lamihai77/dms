@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+function parseBooleanEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name];
+    if (!raw || raw.trim() === '') return fallback;
+    const normalized = raw.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+    return fallback;
+}
+
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
@@ -16,13 +25,15 @@ export function middleware(request: NextRequest) {
         return NextResponse.next();
     }
 
-    // Dacă există identitate AD transmisă de proxy/IIS, lăsăm request-ul mai departe.
-    const adUser =
-        request.headers.get('x-ms-client-principal-name') ||
-        request.headers.get('remote-user') ||
-        request.headers.get('x-forwarded-user');
-    if (adUser) {
-        return NextResponse.next();
+    // Folosim headere de auth de la proxy doar daca sunt activate explicit.
+    if (parseBooleanEnv('TRUST_PROXY_AUTH_HEADERS', false)) {
+        const adUser =
+            request.headers.get('x-ms-client-principal-name') ||
+            request.headers.get('remote-user') ||
+            request.headers.get('x-forwarded-user');
+        if (adUser) {
+            return NextResponse.next();
+        }
     }
 
     // În standalone verificăm doar existența cookie-ului; validarea cryptografică este în API.
